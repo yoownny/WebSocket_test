@@ -16,17 +16,9 @@ public class WebSocketEventListener {
     public void handleSessionConnected(SessionConnectEvent event) {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
         String userId = accessor.getFirstNativeHeader("userId");
-        String nickname = accessor.getFirstNativeHeader("nickname");
-
         if (userId != null) {
             accessor.getSessionAttributes().put("userId", Long.valueOf(userId));
             log.info("✅ WebSocket 연결됨 - userId: {}", userId);
-            if (nickname != null) {
-                accessor.getSessionAttributes().put("nickname", nickname);
-                log.info("✅ nickname 저장: {}", nickname);
-            } else {
-                log.warn("❌ nickname이 없음");
-            }
         } else {
             log.info("❌ userId가 없음");
         }

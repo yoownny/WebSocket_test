@@ -12,14 +12,14 @@ public class WebSocketUtils {
         if (sessionAttributes != null && sessionAttributes.containsKey("userId")) {
             return (Long) sessionAttributes.get("userId");
         }
-        return null;
+        return 0L;
     }
     public static String getNicknameFromSession(SimpMessageHeaderAccessor headerAccessor) {
         Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
         if(sessionAttributes != null && sessionAttributes.containsKey("nickname")) {
             return (String) sessionAttributes.get("nickname");
         }
-        return null;
+        return "";
     }
 
 }

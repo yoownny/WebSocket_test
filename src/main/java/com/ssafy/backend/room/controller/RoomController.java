@@ -1,7 +1,6 @@
 package com.ssafy.backend.room.controller;
 
 import com.ssafy.backend.memory.Room;
-import com.ssafy.backend.memory.repository.RoomRepository;
 import com.ssafy.backend.room.dto.request.RoomCreateRequest;
 import com.ssafy.backend.room.dto.request.RoomJoinRequest;
 import com.ssafy.backend.room.dto.request.RoomLeaveRequest;
@@ -10,7 +9,6 @@ import com.ssafy.backend.room.dto.response.RoomResponse;
 import com.ssafy.backend.room.service.RoomService;
 import com.ssafy.backend.websocket.service.WebSocketNotificationService;
 import com.ssafy.backend.websocket.util.WebSocketUtils;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -93,6 +91,7 @@ public class RoomController {
         try {
             RoomListResponse response = RoomListResponse.from(roomService.getAllRooms());
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_LIST", response);
+
         } catch (Exception e) {
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ERROR", e.getMessage());
         }

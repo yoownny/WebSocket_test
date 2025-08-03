@@ -106,7 +106,13 @@ public class JWTFilter extends OncePerRequestFilter {
                 "/api/auth/login",
                 "/api/auth/signup",
                 "/api/auth/check-name",
-                "/api/auth/refresh" // TODO: 추후 refresh 토큰 API 작업 필요
+                "/api/auth/refresh", // TODO: 추후 refresh 토큰 API 작업 필요
+                // WebSocket 관련 경로들 추가
+                "/ws/**",
+                "/app/**",
+                "/topic/**",
+                "/queue/**",
+                "/user/**"
         );
         return publicPaths.contains(requestURI);
     }
