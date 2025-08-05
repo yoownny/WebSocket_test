@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class ResponseWrapper<T> {
+public class SuccessResponse<T> {
 
     /** HTTP 상태 코드 (200, 201, 400, 401, 404 등) */
     private int statusCode;

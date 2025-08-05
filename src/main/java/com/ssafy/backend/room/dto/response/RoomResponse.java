@@ -13,7 +13,7 @@ import lombok.ToString;
 @ToString
 public class RoomResponse {
     private Long roomId;
-    private String title;
+    //private String title;
     private int maxPlayers;
     private int currentPlayers;
     private int timeLimit;
@@ -24,7 +24,7 @@ public class RoomResponse {
     public static RoomResponse from(Room room) {
         return RoomResponse.builder()
                 .roomId(room.getRoomId())
-                .title(room.getTitle())
+                //.title(room.getTitle())
                 .maxPlayers(room.getMaxPlayers())
                 .currentPlayers(room.getCurrentPlayerCount())
                 .timeLimit(room.getTimeLimit())

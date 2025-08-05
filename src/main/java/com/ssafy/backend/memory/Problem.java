@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import java.util.List;
+
 @Getter
 @RequiredArgsConstructor
 @Builder
@@ -13,7 +15,8 @@ public class Problem {
     private final String title;
     private final String content;
     private final String answer;
-    private final String genre;
+    private final List<String> genre;
     private final Difficulty difficulty;
-    private final Long creatorId; // 창작자 (기존 문제는 null)
+    private final Long creatorId;
+    private final String nickname;
 }

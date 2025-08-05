@@ -11,17 +11,27 @@ import lombok.ToString;
 @Getter
 @ToString
 public class RoomListResponse {
-    private List<RoomResponse> rooms;
-    private int totalCount;
+    private List<RoomResponse> rooms;      // 방 목록
+    private Integer totalCount;            // 전체 방 개수
+    private Integer currentPage;           // 현재 페이지
+    private Integer totalPages;            // 전체 페이지 수
+    private Boolean hasNext;               // 다음 페이지 존재 여부
+    private Boolean hasPrevious;           // 이전 페이지 존재 여부
 
-    public static RoomListResponse from(List<Room> rooms) {
+    public static RoomListResponse of(List<Room> rooms, int page, int size, int totalCount) {
         List<RoomResponse> roomResponses = rooms.stream()
                 .map(RoomResponse::from)
                 .collect(Collectors.toList());
 
+        int totalPages = (int) Math.ceil((double) totalCount / size);
+
         return RoomListResponse.builder()
                 .rooms(roomResponses)
-                .totalCount(roomResponses.size())
+                .totalCount(totalCount)
+                .currentPage(page)
+                .totalPages(totalPages)
+                .hasNext(page < totalPages - 1)
+                .hasPrevious(page > 0)
                 .build();
     }
 }

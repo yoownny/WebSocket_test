@@ -29,16 +29,6 @@ public class JWTUtil {
                 .get("userId", Long.class);
     }
 
-    // social_id 추출
-    public String getSocialId(String token) {
-        return Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .get("socialId", String.class);
-    }
-
     // nickname 추출
     public String getNickname(String token) {
         return Jwts.parser()
@@ -81,11 +71,10 @@ public class JWTUtil {
     }
 
     // 토큰 생성
-    public String createJwt(String category, Long userId, String socialId, String nickname, String role, Long expiredMs) {
+    public String createJwt(String category, Long userId, String nickname, String role, Long expiredMs) {
         return Jwts.builder()
                 .claim("category", category)
                 .claim("userId", userId)
-                .claim("socialId", socialId)
                 .claim("nickname", nickname)
                 .claim("role", role)
                 .issuedAt(new Date(System.currentTimeMillis()))

@@ -4,6 +4,7 @@ import com.ssafy.backend.memory.Room;
 import com.ssafy.backend.room.dto.request.RoomCreateRequest;
 import com.ssafy.backend.room.dto.request.RoomJoinRequest;
 import com.ssafy.backend.room.dto.request.RoomLeaveRequest;
+import com.ssafy.backend.room.dto.request.RoomListRequest;
 import com.ssafy.backend.room.dto.response.RoomListResponse;
 import com.ssafy.backend.room.dto.response.RoomResponse;
 import com.ssafy.backend.room.service.RoomService;
@@ -30,12 +31,11 @@ public class RoomController {
         String nickname = WebSocketUtils.getNicknameFromSession(headerAccessor);
 
         try {
-            Room room = roomService.createRoom(request.getTitle(), request.getMaxPlayers(),
-                    request.getTimeLimit(), userId, nickname);
+            Room room = roomService.createRoom(request.getMaxPlayers(), request.getTimeLimit(), userId, nickname);
 
             RoomResponse response = RoomResponse.from(room);
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_CREATED", response);
-
+            webSocketNotificationService.sendToTopic("/topic/lobby/room-created", "ROOM_CREATED", RoomResponse.from(room));
         } catch (Exception e) {
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ERROR", e.getMessage());
         }
@@ -49,14 +49,15 @@ public class RoomController {
 
         try {
             Room room = roomService.joinRoom(request.getRoomId(), userId, nickname);
-
             RoomResponse response = RoomResponse.from(room);
 
             // 본인에게 입장 성공 알림
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_JOINED", response);
-
             // 방의 모든 사람들에게 새 참가자 알림
             webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "PLAYER_JOINED", response);
+
+            // 로비 업데이트
+            webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_UPDATED", response);
 
         } catch (Exception e) {
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ERROR", e.getMessage());
@@ -69,14 +70,24 @@ public class RoomController {
         Long userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
 
         try {
-            // 방에 있는 사람들에게 퇴장 알림 (퇴장 전에 먼저)
-            webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "PLAYER_LEFT", userId);
-            roomService.leaveRoom(request.getRoomId(), userId);
+            // 먼저 방에 있는 사람들에게 퇴장 예정 알림
+            webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "PLAYER_LEAVING", userId);
 
-            // (방장 변경 알림 추가)
+            // 실제 퇴장 처리 (방장 변경 등 포함)
+            Room updatedRoom = roomService.leaveRoom(request.getRoomId(), userId);
+
+            // 방장이 변경되었다면 알림
+            if (updatedRoom != null && updatedRoom.getHostId() != null) {
+                webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "HOST_CHANGED",
+                        RoomResponse.from(updatedRoom));
+            }
 
             // 본인에게 퇴장 완료 알림
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_LEFT", "방에서 나왔습니다.");
+
+            // 로비 업데이트
+            webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_UPDATED",
+                    updatedRoom != null ? RoomResponse.from(updatedRoom) : null);
 
         } catch (Exception e) {
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ERROR", e.getMessage());
@@ -85,11 +96,16 @@ public class RoomController {
 
     // 방 목록 조회
     @MessageMapping("/room/list")
-    public void getRoomList(SimpMessageHeaderAccessor headerAccessor) {
+    public void getRoomList(@Payload RoomListRequest roomListRequest, SimpMessageHeaderAccessor headerAccessor) {
         Long userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
 
         try {
-            RoomListResponse response = RoomListResponse.from(roomService.getAllRooms());
+            // 요청이 null인 경우 기본값 사용
+            if (roomListRequest == null) {
+                roomListRequest = new RoomListRequest();
+            }
+
+            RoomListResponse response = roomService.getRooms(roomListRequest);
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_LIST", response);
 
         } catch (Exception e) {

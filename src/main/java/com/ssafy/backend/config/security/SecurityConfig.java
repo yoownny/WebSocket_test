@@ -41,6 +41,14 @@ public class SecurityConfig {
     }
 
     /**
+     * AuthenticationManager Bean 등록
+     */
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
+        return configuration.getAuthenticationManager();
+    }
+
+    /**
      * Spring Security 메인 설정
      * OAuth + JWT 기반 인증 시스템 구성
      */
@@ -54,12 +62,17 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/login",           // 로그인
                                 "/api/auth/refresh",         // JWT 토큰 갱신
+                                "/api/auth/nickname",          // 닉네임 설정(회원가입)
+                                "/api/auth/check-nickname",      // 닉네임 중복 확인
+                                "/api/auth/logout",              // 로그아웃
                                 "/api/auth/nickname",        // 닉네임 설정(회원가입)
-                                "/api/users/check-nickname", // 닉네임 중복 확인
                                 "/ws/**",                    // WebSocket 연결 엔드포인트
                                 "/app/**",                   // STOMP 클라이언트 → 서버 메시지
                                 "/topic/**",                 // STOMP 서버 → 클라이언트 브로드캐스트
-                                "/queue/**"                  // STOMP 서버 → 클라이언트 개인 메시지
+                                "/queue/**",                  // STOMP 서버 → 클라이언트 개인 메시지\
+                                "swagger-ui/**",
+                                "v3/api-docs/**"
+
                         ).permitAll()
                         // 나머지는 모두 인증 필요
                         .anyRequest().authenticated()

@@ -16,7 +16,7 @@ public class Room {
     private final int maxPlayers;
     private final int timeLimit;
 
-    private String title;
+    //private String title;
     private RoomState state;
     private Long hostId;
     private Problem selectedProblem; // null이면 문제가 선택되지 않은 상태
