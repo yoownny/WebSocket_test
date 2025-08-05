@@ -13,13 +13,13 @@ import lombok.ToString;
 @ToString
 public class RoomResponse {
     private Long roomId;
-    //private String title;
     private int maxPlayers;
     private int currentPlayers;
     private int timeLimit;
     private RoomState state;
     private Long hostId;
     private List<PlayerResponse> players;
+
 
     public static RoomResponse from(Room room) {
         return RoomResponse.builder()

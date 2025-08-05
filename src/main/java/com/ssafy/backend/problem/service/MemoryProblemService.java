@@ -1,5 +1,6 @@
 package com.ssafy.backend.problem.service;
 
+import com.ssafy.backend.common.enums.Source;
 import com.ssafy.backend.memory.Problem;
 import com.ssafy.backend.memory.type.Difficulty;
 import com.ssafy.backend.problem.dto.Request.ProblemSubmitRequestDto;
@@ -37,6 +38,7 @@ public class MemoryProblemService {
                 .difficulty(Difficulty.valueOf(dto.getDifficulty().toUpperCase()))
                 .creatorId(dto.getCreator().getId())
                 .nickname(dto.getCreator().getNickname())
+                .source(Source.valueOf("CUSTOM"))
                 .build();
 
         // 메모리 저장소에 저장
