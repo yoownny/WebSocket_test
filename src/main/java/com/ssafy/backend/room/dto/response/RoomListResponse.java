@@ -12,16 +12,18 @@ import lombok.ToString;
 @ToString
 public class RoomListResponse {
     private List<RoomResponse> rooms;
-    private int totalCount;
+    private Integer totalCount;
+    private String appliedFilter;
 
-    public static RoomListResponse from(List<Room> rooms) {
+    public static RoomListResponse of(List<Room> rooms, String appliedFilter) {
         List<RoomResponse> roomResponses = rooms.stream()
                 .map(RoomResponse::from)
                 .collect(Collectors.toList());
 
         return RoomListResponse.builder()
                 .rooms(roomResponses)
-                .totalCount(roomResponses.size())
+                .totalCount(rooms.size())
+                .appliedFilter(appliedFilter)
                 .build();
     }
 }

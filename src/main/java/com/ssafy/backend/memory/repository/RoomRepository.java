@@ -1,10 +1,12 @@
 package com.ssafy.backend.memory.repository;
 
 import com.ssafy.backend.memory.Room;
+import com.ssafy.backend.memory.type.RoomState;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
@@ -73,5 +75,23 @@ public class RoomRepository {
     // 사용자의 방 매핑 정보 제거
     public void removeUserRoom(Long userId) {
         userToRoom.remove(userId);
+    }
+
+    public List<Room> findAllSorted() {
+        return rooms.values().stream()
+                .sorted((r1, r2) -> {
+                    // 상태별 정렬 후 방 번호 정렬
+                    int stateCompare = r1.getState().compareTo(r2.getState());
+                    if (stateCompare != 0) return stateCompare;
+                    return r1.getRoomId().compareTo(r2.getRoomId());
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<Room> findByState(RoomState state) {
+        return rooms.values().stream()
+                .filter(room -> room.getState() == state)
+                .sorted((r1, r2) -> r1.getRoomId().compareTo(r2.getRoomId()))
+                .collect(Collectors.toList());
     }
 }

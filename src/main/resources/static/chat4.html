@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>웹소켓 게임 테스트</title>
+    <!-- 구버전 STOMP 라이브러리 사용 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script>
+        // 라이브러리 로딩 확인
+        console.log('SockJS loaded:', typeof SockJS !== 'undefined');
+        console.log('Stomp loaded:', typeof Stomp !== 'undefined');
+        console.log('Stomp.over available:', typeof Stomp !== 'undefined' && typeof Stomp.over === 'function');
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            text-align: center;
+            color: #4a5568;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .section {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4299e1;
+        }
+
+        .game-section {
+            border-left-color: #48bb78;
+        }
+
+        .question-section {
+            border-left-color: #ed8936;
+        }
+
+        .answer-section {
+            border-left-color: #9f7aea;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        label {
+            font-weight: bold;
+            min-width: 100px;
+            color: #2d3748;
+        }
+
+        input[type="text"], input[type="number"], textarea, select {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .connect-btn {
+            background: #48bb78;
+            color: white;
+        }
+
+        .connect-btn:hover:not(.disabled) {
+            background: #38a169;
+            transform: translateY(-2px);
+        }
+
+        .disconnect-btn {
+            background: #f56565;
+            color: white;
+        }
+
+        .disconnect-btn:hover:not(.disabled) {
+            background: #e53e3e;
+            transform: translateY(-2px);
+        }
+
+        .send-btn {
+            background: #4299e1;
+            color: white;
+        }
+
+        .send-btn:hover:not(.disabled) {
+            background: #3182ce;
+            transform: translateY(-2px);
+        }
+
+        .game-btn {
+            background: #ed8936;
+            color: white;
+        }
+
+        .game-btn:hover:not(.disabled) {
+            background: #dd6b20;
+            transform: translateY(-2px);
+        }
+
+        .answer-btn {
+            background: #9f7aea;
+            color: white;
+        }
+
+        .answer-btn:hover:not(.disabled) {
+            background: #805ad5;
+            transform: translateY(-2px);
+        }
+
+        .messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: white;
+        }
+
+        .message {
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .message.sent {
+            background: #bee3f8;
+            text-align: right;
+            margin-left: 50px;
+        }
+
+        .message.received {
+            background: #f0fff4;
+            margin-right: 50px;
+        }
+
+        .message.system {
+            background: #fed7d7;
+            text-align: center;
+            font-style: italic;
+            color: #e53e3e;
+        }
+
+        .message.game {
+            background: #fef5e7;
+            border-left: 4px solid #ed8936;
+            font-weight: bold;
+            color: #744210;
+        }
+
+        .message.question {
+            background: #e6fffa;
+            border-left: 4px solid #38b2ac;
+            color: #234e52;
+        }
+
+        .message.answer {
+            background: #faf5ff;
+            border-left: 4px solid #9f7aea;
+            color: #553c9a;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .status.connected {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status.disconnected {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .game-status {
+            background: #e6fffa;
+            border: 2px solid #38b2ac;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .game-status h4 {
+            margin: 0 0 10px 0;
+            color: #234e52;
+        }
+
+        .game-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .game-info-item {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border-left: 3px solid #38b2ac;
+        }
+
+        .message-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+        }
+
+        .disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .answer-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .answer-buttons button {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .correct-btn {
+            background: #48bb78;
+            color: white;
+        }
+
+        .incorrect-btn {
+            background: #f56565;
+            color: white;
+        }
+
+        .irrelevant-btn {
+            background: #a0aec0;
+            color: white;
+        }
+
+        .question-info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            border-left: 4px solid #38b2ac;
+        }
+
+        .question-info.active {
+            background: #e6fffa;
+            border-left-color: #38b2ac;
+        }
+
+        .question-info h5 {
+            margin: 0 0 10px 0;
+            color: #234e52;
+            font-size: 14px;
+        }
+
+        .question-text {
+            font-size: 13px;
+            color: #2d3748;
+            margin-bottom: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            font-style: italic;
+        }
+
+        .question-meta {
+            font-size: 12px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+
+            .button-row, .answer-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎮 웹소켓 게임 테스트</h1>
+
+    <div class="section">
+        <h3>연결 설정</h3>
+        <div class="input-group">
+            <label>서버 URL:</label>
+            <input type="text" id="serverUrl" value="http://localhost:8080/ws" placeholder="웹소켓 서버 URL">
+        </div>
+        <div class="input-group">
+            <label>방 ID:</label>
+            <input type="number" id="roomId" value="1" placeholder="방 ID">
+        </div>
+        <div class="input-group">
+            <label>사용자 ID:</label>
+            <input type="number" id="userId" value="1" placeholder="사용자 ID (숫자)">
+        </div>
+        <div class="input-group">
+            <label>사용자명:</label>
+            <input type="text" id="username" value="테스터1" placeholder="사용자명 (표시용)">
+        </div>
+        <div class="button-row">
+            <button id="connectBtn" class="connect-btn">🔗 연결</button>
+            <button id="disconnectBtn" class="disconnect-btn disabled">❌ 연결 해제</button>
+        </div>
+    </div>
+
+    <div id="status" class="status disconnected">연결되지 않음</div>
+
+    <div id="gameStatus" class="game-status" style="display: none;">
+        <h4>🎮 게임 상태</h4>
+        <div class="game-info">
+            <div class="game-info-item">
+                <strong>현재 질문자:</strong> <span id="currentQuestioner">-</span>
+            </div>
+            <div class="game-info-item">
+                <strong>다음 질문자:</strong> <span id="nextQuestioner">-</span>
+            </div>
+            <div class="game-info-item">
+                <strong>남은 질문:</strong> <span id="remainingQuestions">-</span>
+            </div>
+            <div class="game-info-item">
+                <strong>게임 시간:</strong> <span id="gameTime">-</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="two-column">
+        <div class="section">
+            <h3>💬 채팅 및 메시지</h3>
+            <div id="messages" class="messages"></div>
+            <div class="message-form">
+                <input type="text" id="messageInput" placeholder="채팅 메시지를 입력하세요..." disabled>
+                <button id="sendBtn" class="send-btn disabled">전송</button>
+            </div>
+        </div>
+
+        <div class="section game-section">
+            <h3>🎮 게임 제어</h3>
+            <div class="button-row">
+                <button id="gameStartBtn" class="game-btn disabled">🚀 게임 시작</button>
+                <button id="gameEndBtn" class="disconnect-btn disabled">🛑 게임 종료</button>
+            </div>
+
+            <div class="section question-section" style="margin-top: 20px;">
+                <h4>❓ 질문 제출</h4>
+                <div class="input-group">
+                    <label>질문:</label>
+                    <textarea id="questionInput" placeholder="질문을 입력하세요..." disabled rows="3"></textarea>
+                </div>
+                <button id="questionBtn" class="game-btn disabled">📝 질문 제출</button>
+            </div>
+
+            <div class="section answer-section" style="margin-top: 20px;">
+                <h4>💬 답변 제출 (출제자 전용)</h4>
+                <p style="font-size: 12px; color: #666; margin-bottom: 15px;">
+                    받은 질문에 대해 답변하세요. 답변할 질문이 아래에 표시됩니다.
+                </p>
+
+                <div id="questionInfo" class="question-info">
+                    <h5>📋 답변할 질문</h5>
+                    <div id="questionDisplay" class="question-text">질문이 없습니다</div>
+                    <div id="questionMeta" class="question-meta">질문자: - | 시간: -</div>
+                </div>
+
+                <div class="answer-buttons">
+                    <button id="correctBtn" class="answer-btn correct-btn disabled">✅ 맞습니다</button>
+                    <button id="incorrectBtn" class="answer-btn incorrect-btn disabled">❌ 틀렸습니다</button>
+                    <button id="irrelevantBtn" class="answer-btn irrelevant-btn disabled">🤷 상관없음</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let stompClient = null;
+    let connected = false;
+    let currentRoomId = null;
+    let currentUserId = null;
+    let currentUsername = null;
+    let gameStartTime = null;
+
+    // 질문-답변 연동을 위한 변수들
+    let currentQuestion = null;  // 현재 답변해야 할 질문 정보
+
+    // DOM 요소들
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const gameStartBtn = document.getElementById('gameStartBtn');
+    const gameEndBtn = document.getElementById('gameEndBtn');
+    const questionBtn = document.getElementById('questionBtn');
+    const correctBtn = document.getElementById('correctBtn');
+    const incorrectBtn = document.getElementById('incorrectBtn');
+    const irrelevantBtn = document.getElementById('irrelevantBtn');
+    const messageInput = document.getElementById('messageInput');
+    const questionInput = document.getElementById('questionInput');
+    const messages = document.getElementById('messages');
+    const status = document.getElementById('status');
+    const gameStatus = document.getElementById('gameStatus');
+
+    // 질문 정보 표시 요소들
+    const questionInfo = document.getElementById('questionInfo');
+    const questionDisplay = document.getElementById('questionDisplay');
+    const questionMeta = document.getElementById('questionMeta');
+
+    // 게임 상태 요소들
+    const currentQuestionerSpan = document.getElementById('currentQuestioner');
+    const nextQuestionerSpan = document.getElementById('nextQuestioner');
+    const remainingQuestionsSpan = document.getElementById('remainingQuestions');
+    const gameTimeSpan = document.getElementById('gameTime');
+
+    // 이벤트 리스너
+    connectBtn.addEventListener('click', connect);
+    disconnectBtn.addEventListener('click', disconnect);
+    sendBtn.addEventListener('click', sendMessage);
+    gameStartBtn.addEventListener('click', startGame);
+    gameEndBtn.addEventListener('click', endGame);
+    questionBtn.addEventListener('click', sendQuestion);
+    correctBtn.addEventListener('click', () => sendAnswer('CORRECT'));
+    incorrectBtn.addEventListener('click', () => sendAnswer('INCORRECT'));
+    irrelevantBtn.addEventListener('click', () => sendAnswer('IRRELEVANT'));
+
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    questionInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && e.ctrlKey) {
+            sendQuestion();
+        }
+    });
+
+    function connect() {
+        // 라이브러리 로딩 확인
+        if (typeof SockJS === 'undefined') {
+            addMessage('SockJS 라이브러리가 로드되지 않았습니다.', 'system');
+            return;
+        }
+
+        if (typeof Stomp === 'undefined') {
+            addMessage('Stomp 라이브러리가 로드되지 않았습니다.', 'system');
+            return;
+        }
+
+        const serverUrl = document.getElementById('serverUrl').value;
+        const roomId = document.getElementById('roomId').value;
+        const userId = document.getElementById('userId').value;
+        const username = document.getElementById('username').value;
+
+        if (!serverUrl || !roomId || !userId || !username) {
+            alert('모든 필드를 입력해주세요!');
+            return;
+        }
+
+        currentRoomId = roomId;
+        currentUserId = parseInt(userId);
+        currentUsername = username;
+
+        addMessage(`${serverUrl}에 연결 시도 중...`, 'system');
+
+        try {
+            const socket = new SockJS(serverUrl);
+            stompClient = Stomp.over(socket);
+
+            // 디버그 설정
+            stompClient.debug = function(str) {
+                if (str.includes('Connected') || str.includes('ERROR') || str.includes('DISCONNECT')) {
+                    console.log('STOMP: ' + str);
+                }
+            };
+
+            // 하트비트 설정
+            stompClient.heartbeat.outgoing = 20000;
+            stompClient.heartbeat.incoming = 20000;
+
+            // STOMP 연결
+            stompClient.connect({
+                    userId: currentUserId.toString(), // ✅ userId를 헤더에 담아 서버로 전달
+                    'user-id': currentUserId.toString(), // 다른 형태로도 시도
+                    'X-User-Id': currentUserId.toString() // 헤더 형태로도 시도
+                },
+                function(frame) {
+                    console.log('STOMP Connected: ' + frame);
+                    console.log('연결된 사용자 ID:', currentUserId);
+                    console.log('연결 헤더:', frame.headers);
+                    connected = true;
+                    updateUI();
+                    addMessage(`방 ${roomId}에 연결 성공!`, 'system');
+                    subscribeToChannels();
+                },
+                function(error) {
+                    console.log('STOMP Connection error: ', error);
+                    addMessage('STOMP 연결 실패: ' + (error.headers ? error.headers.message : error), 'system');
+                    connected = false;
+                    updateUI();
+                }
+            );
+
+        } catch (error) {
+            console.error('연결 중 에러:', error);
+            addMessage('연결 중 에러: ' + error.message, 'system');
+            connected = false;
+            updateUI();
+        }
+    }
+
+    function subscribeToChannels() {
+        try {
+            // 채팅 구독
+            stompClient.subscribe(`/topic/chat/${currentRoomId}`, function(message) {
+                const chatMessage = JSON.parse(message.body);
+                const messageType = chatMessage.username === currentUsername ? 'sent' : 'received';
+                addMessage(`${chatMessage.username}: ${chatMessage.content}`, messageType);
+            });
+
+            // 게임 시작 알림 구독
+            stompClient.subscribe(`/topic/game/${currentRoomId}/game-started`, function(message) {
+                const gameStartMessage = JSON.parse(message.body);
+                addMessage(`🎮 게임 시작! ${gameStartMessage.message || '게임이 시작되었습니다!'}`, 'game');
+                handleGameStart(gameStartMessage);
+            });
+
+            // 게임 종료 알림 구독
+            stompClient.subscribe(`/topic/game/end/${currentRoomId}`, function(message) {
+                const gameEndMessage = JSON.parse(message.body);
+                addMessage(`🛑 게임 종료: ${gameEndMessage.message}`, 'game');
+                handleGameEnd(gameEndMessage);
+            });
+
+            // 질문 전송 성공 알림 구독 - 다양한 경로 시도해서 어떤 경로로 오는지 확인
+            console.log('구독 시작 - 현재 사용자 ID:', currentUserId, '방 ID:', currentRoomId);
+
+            // 1. 표준 user 경로
+            stompClient.subscribe(`/user/topic/game/${currentRoomId}/question-send`, function(message) {
+                const questionResponse = JSON.parse(message.body);
+                console.log('!!!!!!!질문 관련 내용 (user 경로)', questionResponse);
+                addMessage(`✅ 질문이 성공적으로 전송되었습니다! (user 경로)`, 'system');
+            });
+
+            // 2. user queue 경로 (때로는 이렇게 올 수도 있음)
+            stompClient.subscribe(`/user/queue/topic/game/${currentRoomId}/question-send`, function(message) {
+                const questionResponse = JSON.parse(message.body);
+                console.log('!!!!!!!질문 관련 내용 (queue 경로)', questionResponse);
+                addMessage(`✅ 질문이 성공적으로 전송되었습니다! (queue 경로)`, 'system');
+            });
+
+            // 3. 직접적인 topic 경로 (혹시 브로드캐스트로 오는 경우)
+            stompClient.subscribe(`/topic/game/${currentRoomId}/question-send`, function(message) {
+                const questionResponse = JSON.parse(message.body);
+                console.log('!!!!!!!질문 관련 내용 (topic 경로)', questionResponse);
+                addMessage(`✅ 질문이 성공적으로 전송되었습니다! (topic 경로)`, 'system');
+            });
+
+            // 답변 전송 성공 알림 구독 - 다양한 경로 시도
+            // 1. 표준 user 경로
+            stompClient.subscribe(`/user/topic/game/${currentRoomId}/answer-send`, function(message) {
+                const answerResponse = JSON.parse(message.body);
+                console.log('답변 전송 성공 (user 경로)', answerResponse);
+                addMessage(`✅ 답변이 성공적으로 전송되었습니다! (user 경로)`, 'system');
+                clearCurrentQuestion();
+            });
+
+            // 2. user queue 경로
+            stompClient.subscribe(`/user/queue/topic/game/${currentRoomId}/answer-send`, function(message) {
+                const answerResponse = JSON.parse(message.body);
+                console.log('답변 전송 성공 (queue 경로)', answerResponse);
+                addMessage(`✅ 답변이 성공적으로 전송되었습니다! (queue 경로)`, 'system');
+                clearCurrentQuestion();
+            });
+
+            // 3. 직접적인 topic 경로
+            stompClient.subscribe(`/topic/game/${currentRoomId}/answer-send`, function(message) {
+                const answerResponse = JSON.parse(message.body);
+                console.log('답변 전송 성공 (topic 경로)', answerResponse);
+                addMessage(`✅ 답변이 성공적으로 전송되었습니다! (topic 경로)`, 'system');
+                clearCurrentQuestion();
+            });
+
+            // 질문 브로드캐스트 구독 (모든 참여자용)
+            stompClient.subscribe(`/topic/game/${currentRoomId}/chat`, function(message) {
+                const gameMessage = JSON.parse(message.body);
+
+                if (gameMessage.type === 'question') {
+                    const questionData = gameMessage.data;
+                    const questionText = questionData.questionRequestDto.message;
+                    const questionerId = questionData.questionRequestDto.senderId;
+
+                    addMessage(`❓ 질문: ${questionText}`, 'question');
+
+                    // 출제자인 경우 질문 정보 저장
+                    if (questionData.hostId === currentUserId) {
+                        setCurrentQuestion(questionText, questionerId);
+                        addMessage(`📋 새로운 질문이 도착했습니다! 답변 섹션을 확인하세요.`, 'system');
+                    }
+
+                    updateGameState(questionData);
+                } else if (gameMessage.type === 'answer') {
+                    const answerData = gameMessage.data;
+                    const answerText = getAnswerText(answerData.answerResponseDto.message);
+                    addMessage(`💬 답변: ${answerText}`, 'answer');
+                    updateGameState(answerData);
+                }
+            });
+
+            // 에러 메시지 구독
+            stompClient.subscribe(`/sub/user/${currentUserId}/error`, function(message) {
+                const errorMessage = JSON.parse(message.body);
+                addMessage(`❌ 에러: ${errorMessage.message || errorMessage}`, 'system');
+            });
+
+            addMessage('모든 채널 구독 완료', 'system');
+
+        } catch (error) {
+            console.error('구독 중 에러:', error);
+            addMessage('구독 실패: ' + error.message, 'system');
+        }
+    }
+
+    function disconnect() {
+        if (stompClient !== null && connected) {
+            stompClient.disconnect();
+            addMessage('연결이 해제되었습니다.', 'system');
+        }
+        connected = false;
+        gameStartTime = null;
+        currentQuestion = null;  // 질문 정보 초기화
+        updateUI();
+        hideGameStatus();
+        clearCurrentQuestion();
+    }
+
+    function sendMessage() {
+        const messageContent = messageInput.value.trim();
+        if (messageContent && connected) {
+            const chatMessage = {
+                username: currentUsername,
+                content: messageContent
+            };
+
+            stompClient.send(`/topic/chat/${currentRoomId}`, {}, JSON.stringify(chatMessage));
+            messageInput.value = '';
+        }
+    }
+
+    function startGame() {
+        if (currentRoomId && currentUserId) {
+            addMessage(`🎮 게임 시작을 요청합니다...`, 'sent');
+
+            try {
+                stompClient.send(
+                    `/app/game/${currentRoomId}/start`
+                );
+                addMessage(`✅ 게임 시작 요청을 서버로 전송했습니다.`, 'system');
+            } catch (error) {
+                console.error('게임 시작 메시지 전송 중 오류:', error);
+                addMessage(`❌ 게임 시작 요청 실패: ${error.message}`, 'system');
+            }
+        }
+    }
+
+    function sendQuestion() {
+        const questionContent = questionInput.value.trim();
+        if (!questionContent) {
+            alert('질문을 입력해주세요!');
+            return;
+        }
+
+        if (!connected) {
+            alert('먼저 웹소켓에 연결해주세요!');
+            return;
+        }
+
+        addMessage(`📝 질문 제출: "${questionContent}"`, 'sent');
+
+        try {
+            stompClient.send(
+                `/app/game/${currentRoomId}/question`,
+                {},
+                questionContent // String을 직접 전송
+            );
+            questionInput.value = '';
+            addMessage(`✅ 질문을 서버로 전송했습니다.`, 'system');
+        } catch (error) {
+            console.error('질문 전송 중 오류:', error);
+            addMessage(`❌ 질문 전송 실패: ${error.message}`, 'system');
+        }
+    }
+
+    function sendAnswer(answerStatus) {
+        if (!connected) {
+            alert('먼저 웹소켓에 연결해주세요!');
+            return;
+        }
+
+        if (!currentQuestion) {
+            alert('답변할 질문이 없습니다!');
+            return;
+        }
+
+        const answerText = getAnswerText(answerStatus);
+        addMessage(`💬 답변 제출: "${answerText}" (질문: "${currentQuestion.question}")`, 'sent');
+
+        try {
+            // AnswerRequestDto 형태로 전송
+            const answerRequest = {
+                questionerId: currentQuestion.questionerId,
+                question: currentQuestion.question,
+                answer: answerStatus
+            };
+
+            console.log('답변 요청 데이터:', answerRequest);
+
+            stompClient.send(
+                `/app/game/${currentRoomId}/answer`,
+                {},
+                JSON.stringify(answerRequest)
+            );
+            addMessage(`✅ 답변을 서버로 전송했습니다.`, 'system');
+        } catch (error) {
+            console.error('답변 전송 중 오류:', error);
+            addMessage(`❌ 답변 전송 실패: ${error.message}`, 'system');
+        }
+    }
+
+    function setCurrentQuestion(questionText, questionerId) {
+        currentQuestion = {
+            question: questionText,
+            questionerId: questionerId,
+            receivedAt: new Date()
+        };
+        updateQuestionDisplay();
+        console.log('질문 정보 저장:', currentQuestion);
+    }
+
+    function clearCurrentQuestion() {
+        currentQuestion = null;
+        updateQuestionDisplay();
+    }
+
+    function updateQuestionDisplay() {
+        if (currentQuestion) {
+            questionDisplay.textContent = `"${currentQuestion.question}"`;
+            questionMeta.textContent = `질문자 ID: ${currentQuestion.questionerId} | 시간: ${currentQuestion.receivedAt.toLocaleTimeString()}`;
+            questionInfo.classList.add('active');
+        } else {
+            questionDisplay.textContent = '질문이 없습니다';
+            questionMeta.textContent = '질문자: - | 시간: -';
+            questionInfo.classList.remove('active');
+        }
+    }
+
+    function getAnswerText(answerStatus) {
+        switch(answerStatus) {
+            case 'CORRECT': return '✅ 맞습니다';
+            case 'INCORRECT': return '❌ 틀렸습니다';
+            case 'IRRELEVANT': return '🤷 상관없음';
+            case 'PENDING': return '⏳ 답변 대기중';
+            default: return answerStatus;
+        }
+    }
+
+    function endGame() {
+        if (connected) {
+            const gameEndMessage = {
+                hostUsername: currentUsername,
+                roomId: currentRoomId
+            };
+
+            stompClient.send(`/topic/game/end/${currentRoomId}`, {}, JSON.stringify(gameEndMessage));
+            addMessage(`🛑 게임 종료를 요청했습니다...`, 'sent');
+        }
+    }
+
+    function handleGameStart(gameStartMessage) {
+        console.log('게임 시작!', gameStartMessage);
+        gameStartTime = Date.now();
+        showGameStatus();
+
+        // 게임 정보가 있다면 상태 업데이트
+        if (gameStartMessage.gameInfo && gameStartMessage.gameInfo.data) {
+            updateGameState(gameStartMessage.gameInfo.data);
+        } else if (gameStartMessage.data) {
+            updateGameState(gameStartMessage.data);
+        }
+
+        startGameTimer();
+    }
+
+    function handleGameEnd(gameEndMessage) {
+        console.log('게임 종료!', gameEndMessage);
+        gameStartTime = null;
+        hideGameStatus();
+        clearCurrentQuestion();
+    }
+
+    function updateGameState(gameData) {
+        if (gameData.currentQuestionerId) {
+            currentQuestionerSpan.textContent = `ID: ${gameData.currentQuestionerId}`;
+        }
+        if (gameData.nextQuestioner) {
+            nextQuestionerSpan.textContent = `ID: ${gameData.nextQuestioner}`;
+        }
+        if (gameData.remainingQuestions !== undefined) {
+            remainingQuestionsSpan.textContent = gameData.remainingQuestions;
+        }
+    }
+
+    function showGameStatus() {
+        gameStatus.style.display = 'block';
+    }
+
+    function hideGameStatus() {
+        gameStatus.style.display = 'none';
+    }
+
+    function startGameTimer() {
+        setInterval(() => {
+            if (gameStartTime) {
+                const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                gameTimeSpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }, 1000);
+    }
+
+    function addMessage(message, type = 'received') {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+        messageDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        messages.appendChild(messageDiv);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function updateUI() {
+        if (connected) {
+            connectBtn.classList.add('disabled');
+            disconnectBtn.classList.remove('disabled');
+            sendBtn.classList.remove('disabled');
+            gameStartBtn.classList.remove('disabled');
+            gameEndBtn.classList.remove('disabled');
+            questionBtn.classList.remove('disabled');
+            correctBtn.classList.remove('disabled');
+            incorrectBtn.classList.remove('disabled');
+            irrelevantBtn.classList.remove('disabled');
+            messageInput.disabled = false;
+            questionInput.disabled = false;
+            status.textContent = `방 ${currentRoomId}에 연결됨 (ID: ${currentUserId}, 이름: ${currentUsername})`;
+            status.className = 'status connected';
+        } else {
+            connectBtn.classList.remove('disabled');
+            disconnectBtn.classList.add('disabled');
+            sendBtn.classList.add('disabled');
+            gameStartBtn.classList.add('disabled');
+            gameEndBtn.classList.add('disabled');
+            questionBtn.classList.add('disabled');
+            correctBtn.classList.add('disabled');
+            incorrectBtn.classList.add('disabled');
+            irrelevantBtn.classList.add('disabled');
+            messageInput.disabled = true;
+            questionInput.disabled = true;
+            status.textContent = '연결되지 않음';
+            status.className = 'status disconnected';
+        }
+    }
+
+    // 페이지 언로드 시 연결 해제
+    window.addEventListener('beforeunload', () => {
+        if (connected) {
+            disconnect();
+        }
+    });
+</script>
+</body>
+</html>

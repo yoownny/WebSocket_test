@@ -24,7 +24,7 @@ public class ProblemSummaryDto {
     @Builder
     @AllArgsConstructor
     public static class creatorInfo {
-        private String id;
+        private Long id;
         private String nickname;
     }
 }

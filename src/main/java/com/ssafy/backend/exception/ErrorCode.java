@@ -16,7 +16,7 @@ public enum ErrorCode {
 
     // ===== 인증/인가 에러 =====
     INVALID_USER(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
-    USER_NOT_FOUND(HttpStatus.UNAUTHORIZED, "사용자를 찾을 수 없습니다."),
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "권한이 없습니다."),
 
     // ===== JWT 토큰 에러 =====

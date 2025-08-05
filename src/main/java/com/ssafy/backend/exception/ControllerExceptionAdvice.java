@@ -1,7 +1,7 @@
 package com.ssafy.backend.exception;
 
 import com.ssafy.backend.common.response.ApiResponse;
-import com.ssafy.backend.common.response.ResponseWrapper;
+import com.ssafy.backend.common.response.ErrorResponse;
 import com.ssafy.backend.exception.model.BaseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +19,7 @@ public class ControllerExceptionAdvice {
      * 커스텀 비즈니스 예외 처리
      */
     @ExceptionHandler(BaseException.class)
-    protected ResponseEntity<ResponseWrapper<Void>> handleBaseException(BaseException exception) {
+    protected ResponseEntity<ErrorResponse> handleBaseException(BaseException exception) {
         log.warn("[{}] {} - {}",
                 exception.getErrorCode().name(),
                 exception.getClass().getSimpleName(),
@@ -30,7 +30,7 @@ public class ControllerExceptionAdvice {
 
     // 이 밑으로 Spring Web 관련 예외들 처리
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    protected ResponseEntity<ResponseWrapper<Void>> handleMissingServletRequestParameter(
+    protected ResponseEntity<ErrorResponse> handleMissingServletRequestParameter(
             MissingServletRequestParameterException exception) {
 
         log.warn("Missing required parameter: {}", exception.getParameterName());
@@ -41,7 +41,7 @@ public class ControllerExceptionAdvice {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    protected ResponseEntity<ResponseWrapper<Void>> handleHttpMessageNotReadable(
+    protected ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
             HttpMessageNotReadableException exception) {
 
         log.warn("HTTP message not readable: {}", exception.getMessage());
@@ -50,7 +50,7 @@ public class ControllerExceptionAdvice {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    protected ResponseEntity<ResponseWrapper<Void>> handleMethodArgumentNotValid(
+    protected ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(
             MethodArgumentNotValidException exception) {
 
         // 검증 실패한 필드들을 조합 -> 사용자 친화적 메시지 생성
@@ -71,7 +71,7 @@ public class ControllerExceptionAdvice {
      *     RuntimeException, 기타 예상치 못한 에러들
      */
     @ExceptionHandler(Exception.class)
-    protected ResponseEntity<ResponseWrapper<Void>> handleGenericException(Exception exception) {
+    protected ResponseEntity<ErrorResponse> handleGenericException(Exception exception) {
         log.error("Unhandled exception occurred: {}", exception.getMessage(), exception);
 
         return ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR);

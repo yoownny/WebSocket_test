@@ -49,6 +49,11 @@ public class ProblemRepositoryImpl implements ProblemRepositoryCustom {
             builder.and(info.difficulty.eq(Difficulty.valueOf(requestDto.getDifficulty())));
         }
 
+        // 특정 문제 ID 조회
+        if (requestDto.getProblemId() != null) {
+            builder.and(problem.id.eq(requestDto.getProblemId()));
+        }
+
         if (requestDto.getSource() != null) {
             builder.and(problem.source.eq(Source.valueOf(requestDto.getSource())));
         }
@@ -112,7 +117,7 @@ public class ProblemRepositoryImpl implements ProblemRepositoryCustom {
 
         // 문제 ID로 User(작성자) 매핑 조회
         Map<Long, ProblemSummaryDto.creatorInfo> creatorMap = queryFactory
-                .select(problem.id, user.socialId, user.nickname)
+                .select(problem.id, user.userId, user.nickname)
                 .from(problem)
                 .join(ucp).on(problem.id.eq(ucp.problemId))
                 .join(user).on(ucp.userId.eq(user.userId))
@@ -122,9 +127,10 @@ public class ProblemRepositoryImpl implements ProblemRepositoryCustom {
                 .collect(Collectors.toMap(
                         tuple -> tuple.get(problem.id),
                         tuple -> new ProblemSummaryDto.creatorInfo(
-                                tuple.get(user.socialId),
+                                tuple.get(user.userId),
                                 tuple.get(user.nickname)
-                        )
+                        ),
+                        (existing, replacement) -> existing
                 ));
 
         // ProblemInfo 엔티티 별도 조회 (likes, difficulty 등)

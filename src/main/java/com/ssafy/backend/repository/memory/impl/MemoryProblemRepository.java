@@ -1,121 +1,70 @@
 package com.ssafy.backend.repository.memory.impl;
 
-import com.ssafy.backend.memory.type.Difficulty;
 import com.ssafy.backend.memory.Problem;
 import com.ssafy.backend.repository.memory.api.ProblemRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
-// todo; 안쓰면 삭제 예정
 @Repository
+@Slf4j
 public class MemoryProblemRepository implements ProblemRepository {
 
-    private final ConcurrentHashMap<String, Problem> problems = new ConcurrentHashMap<>();
-    private final Random random = new Random();
-    // 인덱스 추가
-    private final Map<String, List<Problem>> problemsByGenre = new ConcurrentHashMap<>();
-    private final Map<Difficulty, List<Problem>> problemsByDifficulty = new ConcurrentHashMap<>();
+    private final Map<String, Problem> problems = new ConcurrentHashMap<>();
 
-
-    public MemoryProblemRepository() {
-        initializeDefaultProblems();
-    }
-
+    // 문제 저장
     @Override
     public Problem save(Problem problem) {
+        if (problem == null || problem.getProblemId() == null) {
+            throw new IllegalArgumentException("Problem이나 problemId는 null일 수 없습니다");
+        }
+
         problems.put(problem.getProblemId(), problem);
-        // 문제가 추가/수정될 때마다 인덱스를 업데이트해야 함
-        rebuildIndexes(); // 간단한 구현. 더 복잡한 시스템에서는 해당 문제만 부분적으로 업데이트
+        log.debug("메모리 문제 저장 완료: problemId={}, title={}",
+                problem.getProblemId(), problem.getTitle());
+
         return problem;
     }
 
+    // 문제 ID로 문제 조화
     @Override
     public Optional<Problem> findById(String problemId) {
-        return Optional.ofNullable(problems.get(problemId));
-    }
-
-    @Override
-    public List<Problem> findByGenre(String genre) {
-        // 인덱스를 사용하여 O(1) 조회
-        return problemsByGenre.getOrDefault(genre, Collections.emptyList());
-    }
-
-    @Override
-    public List<Problem> findByDifficulty(Difficulty difficulty) {
-        // 인덱스를 사용하여 O(1) 조회
-        return problemsByDifficulty.getOrDefault(difficulty, Collections.emptyList());
-    }
-
-    @Override
-    public List<Problem> findAll() {
-        return new ArrayList<>(problems.values());
-    }
-
-    @Override
-    public Optional<Problem> findRandomProblem() {
-        if (problems.isEmpty()) {
+        if (problemId == null || problemId.trim().isEmpty()) {
             return Optional.empty();
         }
-        // 전체 value를 복사하는 대신 keySet을 배열로 만들어 랜덤 접근
-        Object[] keys = problems.keySet().toArray();
-        String randomKey = (String) keys[random.nextInt(keys.length)];
-        return Optional.ofNullable(problems.get(randomKey));
+
+        Problem problem = problems.get(problemId);
+        log.debug("메모리 문제 조회: problemId={}, found={}", problemId, problem != null);
+
+        // null 여부와 관계없이 Optional로 감싸서 반환
+        return Optional.ofNullable(problem);
     }
 
+    // 저장된 모든 문제 리스트로 반환
     @Override
-    public void clearStore() {
-        problems.clear();
-        initializeDefaultProblems();
+    public List<Problem> findAll() {
+        List<Problem> allProblems = new ArrayList<>(problems.values());
+        log.debug("전체 메모리 문제 조회: count={}", allProblems.size());
+
+        return allProblems;
     }
 
-    private void initializeDefaultProblems() {
-        // 기본 문제들 초기화
-        problems.put("PROBLEM_001", new Problem(
-                "PROBLEM_001",
-                "미스터리 살인사건",
-                "깊은 밤, 고급 펜션에서 벌어진 의문의 살인사건. 범인을 찾아보세요.",
-                "집사",
-                "추리",
-                Difficulty.NORMAL,
-                null
-        ));
+    // 문제 삭제
+    @Override
+    public void delete(String problemId) {
+        if (problemId == null || problemId.trim().isEmpty()) {
+            log.warn("삭제할 problemId가 유효하지 않습니다: {}", problemId);
+            return;
+        }
 
-        problems.put("PROBLEM_002", new Problem(
-                "PROBLEM_002",
-                "사라진 보물",
-                "해적의 보물이 숨겨진 무인도. 보물의 위치를 찾아보세요.",
-                "동굴 안 바위 뒤",
-                "모험",
-                Difficulty.HARD,
-                null
-        ));
-
-        problems.put("PROBLEM_003", new Problem(
-                "PROBLEM_003",
-                "마법사의 수수께끼",
-                "마법사가 낸 수수께끼를 풀어야 마을을 구할 수 있습니다.",
-                "사랑",
-                "판타지",
-                Difficulty.EASY,
-                null
-        ));
-        // 인덱스 재생성
-        rebuildIndexes();
-    }
-
-    // 인덱스를 생성하는 헬퍼 메서드
-    private void rebuildIndexes() {
-        problemsByGenre.clear();
-        problemsByDifficulty.clear();
-
-        // GroupingBy를 사용하여 효율적으로 인덱스 생성
-        problemsByGenre.putAll(problems.values().stream()
-                .collect(Collectors.groupingBy(Problem::getGenre)));
-
-        problemsByDifficulty.putAll(problems.values().stream()
-                .collect(Collectors.groupingBy(Problem::getDifficulty)));
+        Problem removed = problems.remove(problemId);
+        if (removed != null) {
+            log.info("메모리 문제 삭제 완료: problemId={}, title={}",
+                    problemId, removed.getTitle());
+        } else {
+            log.warn("삭제할 메모리 문제를 찾을 수 없습니다: problemId={}", problemId);
+        }
     }
 }

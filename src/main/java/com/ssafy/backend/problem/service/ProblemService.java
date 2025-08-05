@@ -3,8 +3,9 @@ package com.ssafy.backend.problem.service;
 import com.ssafy.backend.common.enums.Difficulty;
 import com.ssafy.backend.common.enums.Source;
 import com.ssafy.backend.entity.*;
-import com.ssafy.backend.problem.dto.ProblemCreateDto;
+import com.ssafy.backend.problem.dto.Request.ProblemCreateDto;
 import com.ssafy.backend.problem.dto.Request.ProblemSearchRequestDto;
+import com.ssafy.backend.problem.dto.Response.ProblemDetailResponseDto;
 import com.ssafy.backend.problem.dto.Response.ProblemSummaryDto;
 import com.ssafy.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +13,9 @@ import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +39,7 @@ public class ProblemService {
 
         // 1. 사용자 찾기
         // 요청한 유저의 socialId로 DB에서 유저 정보 조회
-        User user = userRepository.findBySocialId(dto.getCreator().getId())
+        User user = userRepository.findById(dto.getCreator().getId())
                 .orElseThrow(() -> new IllegalArgumentException("해당 유저가 존재하지 않습니다."));
 
         // 문제 작성자의 역할이 USER이라면 문제 출처는 CUSTOM
@@ -83,7 +87,7 @@ public class ProblemService {
         userCreatedProblemRepository.save(createdProblem);
 
         // 5. 장르 매핑
-        for (String genreName : dto.getGenre()) {
+        for (String genreName : dto.getGenres()) {
             // 장르 엔티티 조회
             Genre genre = genreRepository.findByName(genreName)
                     .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 장르: " + genreName));
@@ -97,6 +101,56 @@ public class ProblemService {
         }
 
         return saved;
+    }
+
+    // 문제 상세 조회
+    public ProblemDetailResponseDto getProblemDetail(Long problemId) {
+        // 1. 문제 기본 정보 조회
+        Problem problem = problemRepository.findById(problemId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 문제를 찾을 수 없습니다: " + problemId));
+
+        // 2. 문제 추가 정보 조회 (난이도, 좋아요 수, 플레이 수 등)
+        ProblemInfo problemInfo = problemInfoRepository.findById(problemId)
+                .orElseThrow(() -> new IllegalArgumentException("문제 정보를 찾을 수 없습니다: " + problemId));
+
+        // 3. 생성자 정보 조회
+        User creator = userRepository.findById(problem.getCreatorId())
+                .orElseThrow(() -> new IllegalArgumentException("생성자 정보를 찾을 수 없습니다: " + problem.getCreatorId()));
+
+        // 4. 장르 정보 조회
+        List<String> genres = new ArrayList<>();
+        List<ProblemGenre> problemGenres = problemGenreRepository.findAllByProblemId(problemId);
+
+        for (ProblemGenre pg : problemGenres) {
+            Long genreId = pg.getGenreId();
+
+            Optional<Genre> genreOptional = genreRepository.findById(genreId);
+            if (genreOptional.isPresent()) {
+                genres.add(genreOptional.get().getName());
+            } else {
+                genres.add("Unknown");
+            }
+        }
+
+        // 5. DTO 생성 및 반환
+        return ProblemDetailResponseDto.builder()
+                .problemId(problem.getId().toString())
+                .title(problem.getTitle())
+                .content(problem.getContent())
+                .answer(problem.getAnswer())
+                .genres(genres)
+                .difficulty(problemInfo.getDifficulty().name())
+                .creator(ProblemDetailResponseDto.CreatorInfo.builder()
+                        .userId(creator.getSocialId())
+                        .nickname(creator.getNickname())
+                        .build())
+                .likes(problemInfo.getLikes())
+                .playCount(problemInfo.getPlayCount())
+                .successCount(problemInfo.getSuccessCount())
+                .successRate(problemInfo.getSuccessRate())
+                .source(problem.getSource().name())
+                .createdAt(problem.getCreatedAt())
+                .build();
     }
 
 

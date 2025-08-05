@@ -12,7 +12,7 @@ import java.util.List;
 @Builder
 public class GameInfoResponseDto {
     @Builder.Default
-    private String event = "game_started";
+    private String event = "GAME_STARTED";
     private GameStartedData data;
 
     @Getter

@@ -2,7 +2,7 @@ package com.ssafy.backend.memory.type;
 
 public enum Difficulty {
     EASY("쉬움", 1),
-    NORMAL("보통", 2),
+    MEDIUM("보통", 2),
     HARD("어려움", 3);
 
     private final String displayName;
