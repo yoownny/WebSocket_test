@@ -11,6 +11,7 @@ import com.ssafy.backend.problem.dto.Request.ProblemEvaluateRequestDto;
 import com.ssafy.backend.problem.dto.Request.ProblemSubmitRequestDto;
 import com.ssafy.backend.problem.dto.Response.ProblemCreateResponseDto;
 import com.ssafy.backend.problem.dto.Request.ProblemSearchRequestDto;
+import com.ssafy.backend.problem.dto.Response.ProblemDetailResponseDto;
 import com.ssafy.backend.problem.dto.Response.ProblemListResponseDto;
 import com.ssafy.backend.problem.dto.Response.ProblemSummaryDto;
 import com.ssafy.backend.problem.service.MemoryProblemService;
@@ -131,79 +132,25 @@ public class ProblemController {
         );
     }
 
-    //
-//    @PostMapping("/memory")
-//    public ResponseEntity<ResponseWrapper<ProblemCreateResponseDto>> createMemoryProblem(
-//            @Valid @RequestBody ProblemSubmitRequestDto dto) {
-//
-//        Long userId = 1L;
-//
-//        ProblemCreateResponseDto response = memoryProblemService.saveToMemory(dto);
-//
-//        return ApiResponse.success(
-//                SuccessCode.CREATE_SUCCESS.getStatus(),
-//                "문제가 메모리에 임시 저장되었습니다.",
-//                response
-//        );
-//    }
+    @GetMapping("/{problemId}")
+    public ResponseEntity<?> getProblemDetail(
+            @PathVariable("problemId") Long problemId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
 
+        try {
+            ProblemDetailResponseDto response = problemService.getProblemDetail(problemId);
 
-//    @PostMapping("/custom")
-//    public ResponseEntity<?> createProblem(
-//            @Valid @RequestBody ProblemCreateDto dto) {
-//
-//        Long userId = 1L;
-//
-//        Problem saved = problemService.create(dto);
-//
-//        ProblemCreateResponseDto response = ProblemCreateResponseDto.builder()
-//                .problemId(saved.getId().toString()) // Long을 String으로 변환
-//                .title(saved.getTitle())
-//                .content(saved.getContent())
-//                .answer(saved.getAnswer())
-//                .genres(dto.getGenres()) // DTO에서 장르 리스트 가져오기
-//                .difficulty(dto.getDifficulty())
-//                .creator(
-//                        ProblemCreateResponseDto.CreatorInfo.builder()
-//                                .id(dto.getCreator().getId())
-//                                .nickname(dto.getCreator().getNickname())
-//                                .build()
-//                )
-//                .createdAt(LocalDateTime.now()) // 생성 시간 추가
-//                .storageType(ProblemCreateResponseDto.StorageType.DATABASE) // 저장 타입 설정
-//                .build();
-//
-//        log.info("창작 문제 DB 저장 완료: problemId={}, userId={}", saved.getId(), userId);
-//
-//        return ApiResponse.success(
-//                SuccessCode.CREATE_SUCCESS.getStatus(),
-//                "창작 문제가 성공적으로 생성되었습니다.",
-//                response
-//        );
-//    }
-
-//    @PostMapping("/evaluate)
-//    public ResponseEntity<?> evaluate(
-//            @Valid @RequestBody ProblemEvaluateRequestDto request
-//    ) {
-//
-//        Long userId = 1L;
-//
-//        if (!request.isValidRequest()) {
-//            return ApiResponse.error(ErrorCode.INVALID_REQUEST_BODY, "유효하지 않은 평가 요청입니다.");
-//        }
-//
-//        try {
-//            boolean saved = problemEvaluateService.evaluate(request, userId);
-//
-//            if (saved) {
-//                return ApiResponse.success(SuccessCode.CREATE_SUCCESS.getStatus(), "문제가 DB에 저장되었습니다.");
-//            } else {
-//                return ApiResponse.success(SuccessCode.UPDATE_SUCCESS.getStatus(), "평가가 반영되었습니다.");
-//            }
-//        } catch (Exception e) {
-//            log.error("평가 처리 중 오류 발생", e);
-//            return ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR, "평가 처리 중 오류가 발생했습니다.");
-//        }
-//    }
+            return ApiResponse.success(
+                    SuccessCode.GET_SUCCESS.getStatus(),
+                    SuccessCode.GET_SUCCESS.getMessage(),
+                    response
+            );
+        } catch (IllegalArgumentException e) {
+            log.error("문제 조회 실패: problemId={}, error={}", problemId, e.getMessage());
+            return ApiResponse.error(ErrorCode.INVALID_REQUEST_BODY);
+        } catch (Exception e) {
+            log.error("문제 상세 조회 중 오류 발생: problemId={}", problemId, e);
+            return ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
 }

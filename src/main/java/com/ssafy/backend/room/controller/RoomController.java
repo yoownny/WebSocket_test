@@ -31,11 +31,15 @@ public class RoomController {
         String nickname = WebSocketUtils.getNicknameFromSession(headerAccessor);
 
         try {
-            Room room = roomService.createRoom(request.getMaxPlayers(), request.getTimeLimit(), userId, nickname);
+            Room room = roomService.createRoom(request.getMaxPlayers(), request.getTimeLimit(), userId, nickname, request.getProblemInfo());
 
-            RoomResponse response = RoomResponse.from(room);
-            webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_CREATED", response);
-            webSocketNotificationService.sendToTopic("/topic/lobby/room-created", "ROOM_CREATED", RoomResponse.from(room));
+            // 방장에게는 정답 포함해서 전송
+            RoomResponse hostResponse = RoomResponse.from(room, true);
+            webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_CREATED", hostResponse);
+
+            // 로비에는 정답 제외하고 전송
+            RoomResponse lobbyResponse = RoomResponse.from(room, false);
+            webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_CREATED", lobbyResponse);
         } catch (Exception e) {
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ERROR", e.getMessage());
         }

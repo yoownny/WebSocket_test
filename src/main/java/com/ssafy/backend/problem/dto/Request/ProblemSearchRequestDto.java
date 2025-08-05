@@ -16,4 +16,5 @@ public class ProblemSearchRequestDto {
     private String keyword;
     private Long cursor;
     private Integer size = 10;
+    private Long problemId;
 }

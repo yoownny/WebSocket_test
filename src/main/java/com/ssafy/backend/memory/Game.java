@@ -93,9 +93,10 @@ public class Game {
         }
     }
 
+    // 가장 최신 질문 반환 -> 마지막 질문이 무조건 답변 대기중인 질문
     public QnA getLastQnA() {
         synchronized (gameHistory) {
-            return gameHistory.isEmpty() ? null : gameHistory.get(gameHistory.size() - 1);
+            return gameHistory.isEmpty() ? null : gameHistory.getLast();
         }
     }
 
@@ -173,5 +174,14 @@ public class Game {
 
     public void addAnswerAttempt(AnswerAttempt attempt) {
         answerQueue.offer(attempt);
+    }
+
+    // 정답 시도 큐
+    public Optional<AnswerAttempt> peekOptionalAnswer() {
+        return Optional.ofNullable(answerQueue.peek());
+    }
+
+    public AnswerAttempt popAnswer() {
+        return answerQueue.poll();
     }
 }

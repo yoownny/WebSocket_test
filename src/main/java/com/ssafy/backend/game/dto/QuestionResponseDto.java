@@ -10,25 +10,15 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Builder
 public class QuestionResponseDto {
-    @Builder.Default
-    private String event = "question_send";
-    private QnAData data;
-
-    @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    @Builder
-    public static class QnAData {
-        private Long hostId;
-        private QuestionRequestDto questionRequestDto;
-    }
+    private Long hostId;
+    private QuestionRequestDto questionRequestDto;
 
     @Getter
     @AllArgsConstructor
     @NoArgsConstructor
     @Builder
     public static class QuestionRequestDto {
-        private String message;
+        private String question;
         private Long senderId;
     }
 }

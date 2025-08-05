@@ -1,7 +1,6 @@
 package com.ssafy.backend.game.controller;
 
-import com.ssafy.backend.game.dto.GameStartResponseDto;
-import com.ssafy.backend.game.dto.QuestionResponseDto;
+import com.ssafy.backend.game.dto.*;
 import com.ssafy.backend.game.service.GameService;
 import com.ssafy.backend.websocket.service.WebSocketNotificationService;
 import com.ssafy.backend.websocket.util.WebSocketUtils;
@@ -30,52 +29,29 @@ public class GameController {
      * 게임 시작
      */
     @Operation(description = "게임 시작")
-    @MessageMapping("/game/{roomId}/start")
+    @MessageMapping("/games/{roomId}/start")
     public void startGame(@DestinationVariable Long roomId, SimpMessageHeaderAccessor headerAccessor) {
         log.info("게임 시작 요청");
         Long userId = null;
         try {
             userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
-            GameStartResponseDto result = gameService.startGame(roomId, userId);
-            if (result.isSuccess()) {
-                log.info("게임 시작 성공: roomId={}", roomId);
+            GameInfoResponseDto result = gameService.startGame(roomId, userId);
+            log.info("게임 시작 성공: roomId={}", roomId);
 
-                // 방에 있는 모든 사용자에게 게임 시작 알림
-                webSocketNotificationService.sendToTopic(
-                        "/topic/game/" + roomId + "/game-started",
-                        "game-started", result.getGameInfo())
-                ;
-
-                log.info("게임 시작 성공 response {}", result.getGameInfo().getData());
-                // todo; 로비에 방 상태 변경 알림 (게임 중으로 표시)
-/*                List<RoomInfoDto> updatedRooms = lobbyService.getAllRooms();
+            // 방에 있는 모든 사용자에게 게임 시작 알림
+            webSocketNotificationService.sendToTopic("/topic/games/" + roomId + "/game-started", "GAME_STARTED", result);
+            // todo; 로비에 방 상태 변경 알림 (게임 중으로 표시)
+            /*                List<RoomInfoDto> updatedRooms = lobbyService.getAllRooms();
                 messagingTemplate.convertAndSend(
                         "/sub/lobby/rooms-updated",
                         updatedRooms
                 );*/
-            } else {
-                log.warn("게임 시작 실패: userId={}, roomId={}, reason={}",
-                        userId, roomId, result.getErrorMessage());
-
-                // 실패 시 요청자에게만 에러 전송
-                webSocketNotificationService.sendToUser(
-                        userId, // todo; token 관련으로 update 예정
-                        "/error",
-                        "game-started",
-                        "게임 시작 실패: " + result.getErrorMessage()
-                );
-            }
         } catch (
                 Exception e) {
             log.error("게임 시작 처리 중 예외: userId={}, roomId={}, error={}",
                     userId, roomId, e.getMessage());
 
-            webSocketNotificationService.sendToUser(
-                    userId, //todo; token
-                    "/error",
-                    "game-started",
-                    "게임 시작 중 오류가 발생했습니다."
-            );
+            webSocketNotificationService.sendToUser(userId, "/queue/game", "ERROR", "게임 시작 중 오류가 발생했습니다.");
         }
     }
 
@@ -83,38 +59,103 @@ public class GameController {
      * 질문 제출
      */
     @Operation(description = "질문 제출")
-    @MessageMapping("/game/{roomId}/question")
-    public void sendQuestion(@DestinationVariable Long roomId, @Payload String message, SimpMessageHeaderAccessor headerAccessor) {
+    @MessageMapping("/games/{roomId}/question")
+    public void sendQuestion(@DestinationVariable Long roomId, @Payload QuestionRequestDto questionRequestDto, SimpMessageHeaderAccessor headerAccessor) {
         log.info("질문 제출: {}", roomId);
         Long userId = null;
         try {
             userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
-            QuestionResponseDto result = gameService.sendQuestion(roomId, message, userId);
-            log.info("질문 제출 성공");
+            QuestionResponseDto result = gameService.sendQuestion(roomId, questionRequestDto, userId);
+            log.info("질문 제출 성공 hostId={}", result.getHostId());
 
             // 출제자에게 "질문이 잘 도착함" 알림
-            webSocketNotificationService.sendToUser(
-                    result.getData().getHostId(),
-                    "/topic/game/" + roomId + "/question-arrived",
-                    "question-arrived", result);
+            webSocketNotificationService.sendToUser(result.getHostId(), "/queue/game", "QUESTION_SEND", result);
 
             // 질문 정보를 모든 사용자 채팅에 broadcast todo; 채팅/질문 구분 필드 포함 추천)
-            webSocketNotificationService.sendToTopic(
-                    "/topic/game/" + roomId + "/chat",
-                    "question", result);
+            webSocketNotificationService.sendToTopic("/topic/games/" + roomId + "/chat", "QUESTION", result);
         } catch (
                 Exception e) {
-            log.warn("질문 제출 실패: userId={}, roomId={}, reason={}",
-                    userId, roomId, e.getMessage());
-            // 실패 시 요청자에게만 에러 전송
-            webSocketNotificationService.sendToUser(
-                    userId, // todo; token 관련으로 update 예정
-                    "/error",
-                    "question",
-                    e.getMessage()
-            );
+            log.warn("질문 제출 실패: userId={}, roomId={}, reason={}", userId, roomId, e.getMessage());
+            webSocketNotificationService.sendToUser(userId, "/queue/game", "ERROR", e.getMessage());
         }
     }
+
+    /**
+     * 답변 제출
+     */
+    @Operation(description = "답변 제출")
+    @MessageMapping("/games/{roomId}/respond-question")
+    public void respondToQuestion(@DestinationVariable Long roomId, @Payload AnswerRequestDto answerRequestDto, SimpMessageHeaderAccessor headerAccessor) {
+        log.info("답변 제출: {}", roomId);
+        Long userId = null;
+        try {
+            userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
+            AnswerResponseDto result = gameService.respondToQuestion(roomId, answerRequestDto, userId);
+            log.info("답변 제출 성공");
+
+            // 답변 정보를 모든 사용자 채팅에 broadcast
+            webSocketNotificationService.sendToTopic("/topic/games/" + roomId + "/chat", "RESPOND_QUESTION", result);
+
+            // 질문 - 답변 QnAHistory broadcast
+            webSocketNotificationService.sendToTopic("/topic/games/" + roomId + "/history", "QUESTION", result.getQnA());
+
+            // 출제자에게 "답변이 잘 갔음" 알림
+            webSocketNotificationService.sendToUser(
+                    userId, // 출제자 본인
+                    "/queue/game",
+                    "RESPOND_QUESTION", result);
+            log.info("답변에 대하여 질문={}, 답={}, 정답시도 리스트={}", result.getQnA().getQuestion(), result.getQnA().getAnswer(), result.getNextGuessDto().getGuess());
+        } catch (Exception e) {
+            log.warn("답변 제출 실패: userId={}, roomId={}, reason={}", userId, roomId, e.getMessage());
+            webSocketNotificationService.sendToUser(userId, "/queue/game", "ERROR", e.getMessage());
+        }
+    }
+
+    /**
+     * 정답 시도 (추리하기)
+     */
+    @Operation(description = "정답 시도 (추리하기)")
+    @MessageMapping("/games/{roomId}/guess")
+    public void sendGuess(@DestinationVariable Long roomId, @Payload QuestionRequestDto guessRequestDto, SimpMessageHeaderAccessor headerAccessor) {
+        log.info("정답 시도: {}", roomId);
+        Long userId = null;
+        try {
+            userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
+            ChatResponseDto result = gameService.sendGuess(roomId, guessRequestDto, userId);
+            log.info("정답 시도 제출 성공");
+
+            // 정답 시도자에게 알림
+            webSocketNotificationService.sendToUser(userId, "/queue/game", "GUESS_SEND", result);
+
+            // 정답 시도를 모든 사용자 채팅에 broadcast
+            webSocketNotificationService.sendToTopic("/topic/games/" + roomId + "/chat", "RESPOND_GUESS", result);
+
+            log.info("정답 시도 senderId={}, message={}", result.getSenderId(), result.getMessage());
+        } catch (Exception e) {
+            log.warn("정답 시도 실패: userId={}, roomId={}, reason={}", userId, roomId, e.getMessage());
+            webSocketNotificationService.sendToUser(userId, "/queue/game", "ERROR", e.getMessage());
+        }
+    }
+
+
+    /**
+     * 채팅
+     */
+    @Operation(description = "채팅")
+    @MessageMapping("/games/{roomId}/chat")
+    public void sendChat(@DestinationVariable Long roomId, @Payload ChatRequestDto chatRequestDto, SimpMessageHeaderAccessor headerAccessor) {
+        Long userId = null;
+        try {
+            userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
+            ChatResponseDto result = gameService.sendChat(roomId, chatRequestDto, userId);
+            // 모든 사용자 채팅에 broadcast
+            webSocketNotificationService.sendToTopic("/topic/games/" + roomId + "/chat", "CHAT", result);
+            log.info("chat: {}, {}, {}, {}", result.getSenderId(), result.getNickname(), result.getMessage(), result.getTimestamp());
+        } catch (Exception e) {
+            webSocketNotificationService.sendToUser(userId, "/queue/game", "ERROR", e.getMessage());
+        }
+    }
+
 
 //    /**
 //     * 방 나가기 처리
@@ -148,42 +189,6 @@ public class GameController {
 //        }
 //    }
 //
-//    /**
-//     * 준비 상태 토글
-//     */
-//    @Operation(description = "준비 상태 변경", method = "MESSAGE")
-//    @MessageMapping("/room/ready")
-//    public void toggleReady(ReadyToggleRequestDto requestDto) {
-//        log.debug("준비 상태 변경 요청: {}", requestDto);
-//
-//        try {
-//            // 1. 서비스에서 준비 상태 토글 처리
-//            ReadyToggleResult result = roomService.toggleReady(requestDto);
-//
-//            if (result.isSuccess()) {
-//                // 2. 방에 있는 모든 사용자에게 준비 상태 변경 알림
-//                messagingTemplate.convertAndSend(
-//                        "/sub/room/" + requestDto.getRoomId() + "/ready-changed",
-//                        new ReadyChangedResponseDto(requestDto.getUserId(), result.getPlayers())
-//                );
-//            } else {
-//                // 3. 실패 시 개인에게 에러 전송
-//                messagingTemplate.convertAndSendToUser(
-//                        requestDto.getUserId(),
-//                        "/sub/error",
-//                        new ErrorResponseDto(result.getErrorMessage())
-//                );
-//            }
-//
-//        } catch (Exception e) {
-//            log.error("준비 상태 변경 중 오류: {}", e.getMessage());
-//            messagingTemplate.convertAndSendToUser(
-//                    requestDto.getUserId(),
-//                    "/sub/error",
-//                    new ErrorResponseDto("준비 상태 변경 중 오류가 발생했습니다.")
-//            );
-//        }
-//    }
 
 //    /**
 //     * 게임 중 답변 제출

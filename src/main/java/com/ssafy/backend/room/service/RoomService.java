@@ -1,11 +1,17 @@
 package com.ssafy.backend.room.service;
 
 import com.ssafy.backend.memory.Player;
+import com.ssafy.backend.memory.Problem;
 import com.ssafy.backend.memory.Room;
 import com.ssafy.backend.memory.repository.RoomRepository;
 import com.ssafy.backend.memory.type.PlayerRole;
 import com.ssafy.backend.memory.type.PlayerState;
 import com.ssafy.backend.memory.type.RoomState;
+import com.ssafy.backend.problem.dto.Request.ProblemSearchRequestDto;
+import com.ssafy.backend.problem.dto.Response.ProblemSummaryDto;
+import com.ssafy.backend.problem.service.MemoryProblemService;
+import com.ssafy.backend.repository.ProblemRepositoryCustom;
+import com.ssafy.backend.room.dto.request.RoomCreateRequest;
 import com.ssafy.backend.room.dto.request.RoomListRequest;
 import com.ssafy.backend.room.dto.response.RoomListResponse;
 import com.ssafy.backend.websocket.service.WebSocketNotificationService;
@@ -13,6 +19,7 @@ import java.util.Collections;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -21,9 +28,11 @@ import org.springframework.stereotype.Service;
 public class RoomService {
     private final RoomRepository roomRepository;
     private final WebSocketNotificationService webSocketNotificationService;
+    private final MemoryProblemService memoryProblemService;
+    private final ProblemRepositoryCustom problemRepositoryCustom;
 
     // 방 생성
-    public Room createRoom(int maxPlayers, int timeLimit, Long userId, String nickname) {
+    public Room createRoom(int maxPlayers, int timeLimit, Long userId, String nickname, RoomCreateRequest.ProblemInfo problemInfo) {
         // 이미 다른 방에 참여 중인지 확인
         Long currentRoomId = roomRepository.getCurrentRoom(userId);
         if (currentRoomId != null) {
@@ -44,6 +53,10 @@ public class RoomService {
         room.getPlayers().put(userId, host);
         room.getPlayerOrder().add(userId);
         room.setHostId(userId);
+
+        // 문제 정보 검증 및 설정 추가
+        Problem selectedProblem = validateAndGetProblem(problemInfo);
+        room.setSelectedProblem(selectedProblem);
 
         // 저장
         roomRepository.save(room);
@@ -125,41 +138,64 @@ public class RoomService {
 
     // 방 목록 조회
     public RoomListResponse getRooms(RoomListRequest roomListRequest) {
-        int page = roomListRequest.getValidatedPage();
-        int size = roomListRequest.getValidatedSize();
         String state = roomListRequest.getState();
 
-        // Repository에서 정렬된 방 목록 조회
-        List<Room> sortedRooms;
+        List<Room> allRooms;
 
         if (state != null && !state.trim().isEmpty()) {
             // 상태 필터링이 있는 경우
             try {
                 RoomState roomState = RoomState.valueOf(state.toUpperCase());
-                sortedRooms = roomRepository.findByState(roomState);
+                allRooms = roomRepository.findByState(roomState);
             } catch (IllegalArgumentException e) {
                 // 잘못된 상태값인 경우 빈 목록 반환
-                sortedRooms = Collections.emptyList();
+                allRooms = Collections.emptyList();
             }
         } else {
-            // 전체 조회 (정렬된 상태로)
-            sortedRooms = roomRepository.findAllSorted();
+            allRooms = roomRepository.findAllSorted();
         }
 
-        // 페이지네이션 적용
-        List<Room> paginatedRooms = applyPagination(sortedRooms, page, size);
-
-        // 응답 생성
-        return RoomListResponse.of(paginatedRooms, page, size, sortedRooms.size());
+        return RoomListResponse.of(allRooms, state);
     }
 
-    // 페이지네이션만 처리
-    private List<Room> applyPagination(List<Room> rooms, int page, int size) {
-        int startIndex = page * size;
-        int endIndex = Math.min(startIndex + size, rooms.size());
-        if (startIndex >= rooms.size()) {
-            return Collections.emptyList();
+    private Problem validateAndGetProblem(RoomCreateRequest.ProblemInfo problemInfo) {
+        if ("CUSTOM".equals(problemInfo.getProblemType())) {
+            // 메모리에서 문제 조회
+            return memoryProblemService.findById(problemInfo.getProblemId());
+        } else if ("ORIGINAL".equals(problemInfo.getProblemType())) {
+            try {
+                Long problemId = Long.valueOf(problemInfo.getProblemId());
+
+                // 기존 searchProblems 활용!
+                ProblemSearchRequestDto searchDto = new ProblemSearchRequestDto();
+                searchDto.setProblemId(problemId);
+
+                Slice<ProblemSummaryDto> result = problemRepositoryCustom.searchProblems(searchDto);
+
+                if (result.isEmpty()) {
+                    throw new RuntimeException("문제를 찾을 수 없습니다.");
+                }
+
+                return convertToMemoryProblem(result.getContent().get(0));
+            } catch (NumberFormatException e) {
+                throw new RuntimeException("올바르지 않은 문제 ID 형식입니다.");
+            }
+        } else {
+            throw new RuntimeException("올바르지 않은 문제 타입입니다.");
         }
-        return rooms.subList(startIndex, endIndex);
+    }
+
+    private Problem convertToMemoryProblem(ProblemSummaryDto dto) {
+        return Problem.builder()
+                .problemId(dto.getProblemId())
+                .title(dto.getTitle())
+                .content(dto.getContent())
+                .answer(dto.getAnswer())
+                .genre(dto.getGenres())
+                .difficulty(com.ssafy.backend.memory.type.Difficulty.valueOf(dto.getDifficulty()))
+                .creatorId(Long.valueOf(dto.getCreator().getId()))
+                .nickname(dto.getCreator().getNickname())
+                .source(com.ssafy.backend.common.enums.Source.valueOf(dto.getSource().toUpperCase()))
+                .build();
     }
 }

@@ -65,7 +65,7 @@ public class SecurityConfig {
                                 "/api/auth/nickname",          // 닉네임 설정(회원가입)
                                 "/api/auth/check-nickname",      // 닉네임 중복 확인
                                 "/api/auth/logout",              // 로그아웃
-                                "/api/auth/nickname",        // 닉네임 설정(회원가입)
+                                "/api/users/{userId}",      // 사용자 정보 조회
                                 "/ws/**",                    // WebSocket 연결 엔드포인트
                                 "/app/**",                   // STOMP 클라이언트 → 서버 메시지
                                 "/topic/**",                 // STOMP 서버 → 클라이언트 브로드캐스트
