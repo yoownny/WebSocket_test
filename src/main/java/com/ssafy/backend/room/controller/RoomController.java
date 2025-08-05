@@ -1,12 +1,13 @@
 package com.ssafy.backend.room.controller;
 
+import com.ssafy.backend.memory.Player;
 import com.ssafy.backend.memory.Room;
+import com.ssafy.backend.memory.repository.RoomRepository;
 import com.ssafy.backend.room.dto.request.RoomCreateRequest;
 import com.ssafy.backend.room.dto.request.RoomJoinRequest;
 import com.ssafy.backend.room.dto.request.RoomLeaveRequest;
 import com.ssafy.backend.room.dto.request.RoomListRequest;
-import com.ssafy.backend.room.dto.response.RoomListResponse;
-import com.ssafy.backend.room.dto.response.RoomResponse;
+import com.ssafy.backend.room.dto.response.*;
 import com.ssafy.backend.room.service.RoomService;
 import com.ssafy.backend.websocket.service.WebSocketNotificationService;
 import com.ssafy.backend.websocket.util.WebSocketUtils;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Controller;
 public class RoomController {
     private final RoomService roomService;
     private final WebSocketNotificationService webSocketNotificationService;
+    private final RoomRepository roomRepository;
 
     // 방 생성
     @MessageMapping("/room/create")
@@ -52,16 +54,20 @@ public class RoomController {
         String nickname = WebSocketUtils.getNicknameFromSession(headerAccessor);
 
         try {
-            Room room = roomService.joinRoom(request.getRoomId(), userId, nickname);
-            RoomResponse response = RoomResponse.from(room);
+            // 결과 DTO로 모든 정보를 한 번에 받음
+            JoinRoomResult result = roomService.joinRoom(request.getRoomId(), userId, nickname);
 
-            // 본인에게 입장 성공 알림
-            webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_JOINED", response);
-            // 방의 모든 사람들에게 새 참가자 알림
-            webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "PLAYER_JOINED", response);
+            // 본인에게 입장 성공 알림 (방장이면 정답 포함)
+            RoomResponse userResponse = RoomResponse.from(result.getRoom(), result.isHost());
+            webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_JOINED", userResponse);
 
-            // 로비 업데이트
-            webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_UPDATED", response);
+            // 방의 다른 사람들에게는 새 참가자 정보만 전송
+            PlayerResponse newPlayerResponse = PlayerResponse.from(result.getJoinedPlayer());
+            webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "PLAYER_JOINED", newPlayerResponse);
+
+            // 로비 업데이트 (정답 제외)
+            RoomResponse lobbyResponse = RoomResponse.from(result.getRoom(), false);
+            webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_UPDATED", lobbyResponse);
 
         } catch (Exception e) {
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ERROR", e.getMessage());
@@ -74,24 +80,40 @@ public class RoomController {
         Long userId = WebSocketUtils.getUserIdFromSession(headerAccessor);
 
         try {
-            // 먼저 방에 있는 사람들에게 퇴장 예정 알림
+            // 나간 참가자 ID만 전송
             webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "PLAYER_LEAVING", userId);
 
-            // 실제 퇴장 처리 (방장 변경 등 포함)
-            Room updatedRoom = roomService.leaveRoom(request.getRoomId(), userId);
+            // 결과 DTO로 모든 상태 변화를 한 번에 받음
+            LeaveRoomResult result = roomService.leaveRoom(request.getRoomId(), userId);
 
-            // 방장이 변경되었다면 알림
-            if (updatedRoom != null && updatedRoom.getHostId() != null) {
-                webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "HOST_CHANGED",
-                        RoomResponse.from(updatedRoom));
-            }
+            // 결과에 따라 적절한 알림 전송
+            Long leavingUserId = result.getLeavingUserId();
 
             // 본인에게 퇴장 완료 알림
-            webSocketNotificationService.sendToUser(userId, "/queue/room", "ROOM_LEFT", "방에서 나왔습니다.");
+            webSocketNotificationService.sendToUser(leavingUserId, "/queue/room", "ROOM_LEFT", "방에서 나왔습니다.");
 
-            // 로비 업데이트
-            webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_UPDATED",
-                    updatedRoom != null ? RoomResponse.from(updatedRoom) : null);
+            if (result.isRoomDeleted()) {
+                // 방이 삭제된 경우
+                log.info("방이 삭제되었습니다: roomId={}, lastUser={}", request.getRoomId(), leavingUserId);
+            } else if (result.isHostChanged()) { // 방장이 변경된 경우
+                // 룸 업데이트
+                PlayerResponse newHostResponse = PlayerResponse.from(result.getNewHost());
+                webSocketNotificationService.sendToTopic("/topic/room/" + request.getRoomId(), "HOST_CHANGED", newHostResponse);
+
+                // 로비 업데이트 (정답 제외)
+                RoomResponse lobbyResponse = RoomResponse.from(result.getRoom(), false);
+                webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_UPDATED", lobbyResponse);
+
+                log.info("방장이 변경되었습니다: roomId={}, oldHost={}, newHost={}",
+                        request.getRoomId(), leavingUserId, result.getNewHost().getUserId());
+
+            } else { // 일반 참가자가 나간 경우
+                // 로비 업데이트 (정답 제외)
+                RoomResponse lobbyResponse = RoomResponse.from(result.getRoom(), false);
+                webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_UPDATED", lobbyResponse);
+
+                log.info("참가자가 퇴장했습니다: roomId={}, userId={}", request.getRoomId(), leavingUserId);
+            }
 
         } catch (Exception e) {
             webSocketNotificationService.sendToUser(userId, "/queue/room", "ERROR", e.getMessage());

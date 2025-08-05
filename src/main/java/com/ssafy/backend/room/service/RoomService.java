@@ -8,15 +8,19 @@ import com.ssafy.backend.memory.type.PlayerRole;
 import com.ssafy.backend.memory.type.PlayerState;
 import com.ssafy.backend.memory.type.RoomState;
 import com.ssafy.backend.problem.dto.Request.ProblemSearchRequestDto;
+import com.ssafy.backend.room.dto.response.JoinRoomResult;
 import com.ssafy.backend.problem.dto.Response.ProblemSummaryDto;
 import com.ssafy.backend.problem.service.MemoryProblemService;
 import com.ssafy.backend.repository.ProblemRepositoryCustom;
 import com.ssafy.backend.room.dto.request.RoomCreateRequest;
 import com.ssafy.backend.room.dto.request.RoomListRequest;
+import com.ssafy.backend.room.dto.response.LeaveRoomResult;
 import com.ssafy.backend.room.dto.response.RoomListResponse;
 import com.ssafy.backend.websocket.service.WebSocketNotificationService;
+
 import java.util.Collections;
 import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Slice;
@@ -42,7 +46,6 @@ public class RoomService {
         // 방 생성
         Long roomId = roomRepository.getNextRoomId();
         Room room = new Room(roomId, maxPlayers, timeLimit);
-        //room.setTitle(title);
         room.setState(RoomState.WAITING);
 
         // 방장으로 입장
@@ -66,7 +69,7 @@ public class RoomService {
     }
 
     // 방 입장
-    public Room joinRoom(Long roomId, Long userId, String nickname) {
+    public JoinRoomResult joinRoom(Long roomId, Long userId, String nickname) {
         Room room = roomRepository.findById(roomId);
         if (room == null) {
             throw new RuntimeException("방을 찾을 수 없습니다.");
@@ -96,43 +99,51 @@ public class RoomService {
 
             roomRepository.save(room);
             roomRepository.setUserRoom(userId, roomId);
-        }
 
-        return room;
+            // 결과 반환
+            boolean isHost = userId.equals(room.getHostId());
+            return JoinRoomResult.success(room, player, isHost);
+        }
     }
 
     // 방 퇴장
-    public Room leaveRoom(Long roomId, Long userId) {
+    public LeaveRoomResult leaveRoom(Long roomId, Long userId) {
         Room room = roomRepository.findById(roomId);
         if (room == null || !room.hasPlayer(userId)) {
-            return null; // 이미 없으면 성공으로 처리
+            // 이미 없으면 삭제된 것으로 처리
+            return LeaveRoomResult.roomDeleted(userId);
         }
+
+        // 퇴장 전 상태 확인
+        boolean wasHost = userId.equals(room.getHostId());
 
         // 플레이어 제거
         room.getPlayers().remove(userId);
         room.getPlayerOrder().remove(userId);
         roomRepository.removeUserRoom(userId);
 
-        // 방장이 나갔으면 방장 이양
-        if (userId.equals(room.getHostId())) {
-            if (room.isEmpty()) {
-                room.setHostId(null);
-            } else {
-                // 첫 번째 남은 플레이어를 방장으로
-                Long newHostId = room.getPlayerOrder().get(0);
-                Player newHost = room.getPlayer(newHostId);
-                newHost.setRole(PlayerRole.HOST);
-                room.setHostId(newHostId);
-            }
-        }
-
+        // 방이 비었으면 삭제
         if (room.isEmpty()) {
+            room.setHostId(null);
             roomRepository.delete(roomId);
             webSocketNotificationService.sendToTopic("/topic/lobby", "ROOM_DELETED", roomId);
-            return null; // 방이 삭제됨
-        } else {
+            return LeaveRoomResult.roomDeleted(userId);
+        }
+
+        // 방장이 나갔으면 방장 이양
+        if (wasHost) {
+            // 첫 번째 남은 플레이어를 방장으로
+            Long newHostId = room.getPlayerOrder().get(0);
+            Player newHost = room.getPlayer(newHostId);
+            newHost.setRole(PlayerRole.HOST);
+            room.setHostId(newHostId);
+
             roomRepository.save(room);
-            return room; // 업데이트된 방 정보 반환
+            return LeaveRoomResult.hostChanged(room, newHost, userId);
+        } else {
+            // 일반 참가자가 나간 경우
+            roomRepository.save(room);
+            return LeaveRoomResult.participantLeft(room, userId);
         }
     }
 
