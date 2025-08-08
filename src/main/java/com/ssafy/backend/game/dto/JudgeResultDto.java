@@ -10,9 +10,11 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AnswerResponseDto {
+public class JudgeResultDto {
+    private Boolean isEnd;
+    private Boolean hasRemainGuess;
+    private EndResponseDto endResponseDto;
     private QnA qnA;
-    private AnswerResultDto.GuessDto nextGuessDto; // 가장 오래된 정답 시도
+    private AnswerResultDto.GuessDto guessDto;
+    private NextTurnDto nextTurnDto;
 }
-
-

@@ -27,7 +27,13 @@ public enum SuccessCode {
 
     // ===== 자주 사용되는 특정 작업들 =====
     NICKNAME_CHECK_SUCCESS(HttpStatus.OK, "사용 가능한 닉네임입니다."),
+
+    // ===== 평가 관련 =====
+    EVALUATION_COMPLETE(HttpStatus.OK, "평가가 완료되었습니다."),
+    PROBLEM_SAVE_COMPLETE(HttpStatus.CREATED, "문제 저장이 완료되었습니다."),
+    ALREADY_EVALUATED(HttpStatus.OK, "이미 평가했습니다."),
     ;
+
 
     private final HttpStatus status;
     private final String message;

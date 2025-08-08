@@ -7,5 +7,5 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AnswerAttempt {
     private final Long userId;  // 정답 시도자
-    private final String answerText;  // 정답 내용
+    private final String guess;  // 정답 내용
 }

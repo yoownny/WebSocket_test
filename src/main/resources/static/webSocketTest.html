@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Debug Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-section {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .form-row {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+
+        .form-label {
+            display: inline-block;
+            width: 200px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        input[type="text"], input[type="url"] {
+            padding: 8px 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .url-input {
+            width: 400px;
+        }
+
+        .destination-input {
+            width: 230px;
+        }
+
+        .header-input {
+            width: 400px;
+        }
+
+        .message-input {
+            width: 290px;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        button:hover {
+            background: #40a9ff;
+        }
+
+        button:disabled {
+            background: #d9d9d9;
+            cursor: not-allowed;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 20px;
+        }
+
+        .checkbox-group label {
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        .console {
+            height: 300px;
+            background: #001529;
+            color: #fff;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+
+        .console .comment {
+            color: #52c41a;
+        }
+
+        .console .command {
+            color: #1890ff;
+        }
+
+        .console .error {
+            color: #ff4d4f;
+        }
+
+        .console .info {
+            color: #faad14;
+        }
+
+        .pulse {
+            animation: pulse 1s infinite;
+        }
+
+        .subscription-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f0f9ff;
+            border: 1px solid #b3d8ff;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin: 5px 0;
+        }
+
+        .subscription-destination {
+            font-family: 'Courier New', monospace;
+            color: #0066cc;
+            font-weight: bold;
+        }
+
+        .unsubscribe-btn {
+            background: #ff4d4f;
+            padding: 4px 8px;
+            font-size: 12px;
+            margin-left: 0;
+        }
+
+        .unsubscribe-btn:hover {
+            background: #ff7875;
+        }
+
+        .stomp-section {
+            background: #fafafa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .stomp-section .section-title {
+            color: #52c41a;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔌 WebSocket Debug Tool</h1>
+
+    <!-- 연결 설정 -->
+    <div class="form-section">
+        <div class="form-row">
+            <span class="form-label">URL</span>
+            <input type="url" id="urlInput" class="url-input"
+                   placeholder="URL to connect, 'ws://' for raw WebSocket or 'http://' for SockJS"
+                   value="http://localhost:8080/ws"/>
+            <button id="connectBtn">Connect</button>
+        </div>
+
+        <div class="form-row">
+            <span class="form-label">Connect Type</span>
+            <div class="checkbox-group">
+                <label><input type="checkbox" id="sockjsCheck"> SockJS</label>
+                <label><input type="checkbox" id="stompCheck"> STOMP</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- STOMP 설정 -->
+    <div class="stomp-section">
+        <div class="section-title">available if ContentType = STOMP</div>
+
+        <div class="form-row">
+            <span class="form-label">STOMP connect header</span>
+            <input type="text" id="stompConnectHeader" class="header-input"
+                   placeholder='json string, e.g. {"header1":"value1", "header2":"value2"}' disabled/>
+        </div>
+
+        <div class="form-row">
+            <span class="form-label">STOMP subscribe destination</span>
+            <input type="text" id="stompSubscribeDestination" class="destination-input" placeholder="e.g. /topic/test"
+                   disabled/>
+            <button id="subscribeBtn" disabled>Subscribe</button>
+        </div>
+
+        <div class="form-row">
+            <span class="form-label">STOMP send header</span>
+            <input type="text" id="stompSendHeader" class="header-input"
+                   placeholder='json string, e.g. {"header1":"value1", "header2":"value2"}' disabled/>
+        </div>
+
+        <div class="form-row">
+            <span class="form-label">STOMP send destination</span>
+            <input type="text" id="stompSendDestination" class="header-input" placeholder="e.g. /app/test" disabled/>
+        </div>
+    </div>
+
+    <!-- 구독 관리 -->
+    <div class="form-section">
+        <div class="form-row">
+            <span class="form-label">Active Subscriptions</span>
+            <div id="subscriptionsList" style="flex: 1;">
+                <div style="color: #999; font-style: italic;">구독이 없습니다.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메시지 송신 -->
+    <div class="form-section">
+        <div class="form-row">
+            <span class="form-label">Message Content</span>
+            <input type="text" id="messageContent" class="message-input" placeholder="message content sent to server"
+                   disabled/>
+            <button id="sendBtn" disabled>Send</button>
+            <button id="clearBtn">Clear Output</button>
+        </div>
+    </div>
+
+    <!-- 콘솔 출력 -->
+    <div class="form-section">
+        <div class="console" id="console">
+            <div class="comment"># console output</div>
+            <div>$ <span class="pulse">_</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- SockJS & STOMP 라이브러리 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+<script>
+    // 상태 변수들
+    let client = null;
+    let connected = false;
+    let sockjsEnabled = false;
+    let stompEnabled = false;
+    let activeSubscriptions = []; // 구독 목록 관리
+
+    // DOM 요소들
+    const urlInput = document.getElementById('urlInput');
+    const connectBtn = document.getElementById('connectBtn');
+    const sockjsCheck = document.getElementById('sockjsCheck');
+    const stompCheck = document.getElementById('stompCheck');
+    const stompConnectHeader = document.getElementById('stompConnectHeader');
+    const stompSubscribeDestination = document.getElementById('stompSubscribeDestination');
+    const subscribeBtn = document.getElementById('subscribeBtn');
+    const stompSendHeader = document.getElementById('stompSendHeader');
+    const stompSendDestination = document.getElementById('stompSendDestination');
+    const messageContent = document.getElementById('messageContent');
+    const sendBtn = document.getElementById('sendBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const console = document.getElementById('console');
+    const subscriptionsList = document.getElementById('subscriptionsList');
+
+    // 콘솔 로그 함수
+    function log(message) {
+        const time = new Date().toLocaleTimeString();
+        const logLine = document.createElement('div');
+
+        if (message.startsWith('_ERROR_:')) {
+            logLine.className = 'error';
+            logLine.innerHTML = `$ <span class="command">${message.replace('_ERROR_:', '')}</span>`;
+        } else if (message.startsWith('_INFO_:')) {
+            logLine.className = 'info';
+            logLine.innerHTML = `$ <span class="command">${message.replace('_INFO_:', '')}</span>`;
+        } else {
+            logLine.innerHTML = `$ <span class="command">${message}</span>`;
+        }
+
+        console.appendChild(logLine);
+        console.scrollTop = console.scrollHeight;
+    }
+
+    function info(message) {
+        log(`_INFO_:${message}`);
+    }
+
+    function error(message) {
+        log(`_ERROR_:${message}`);
+    }
+
+    // 구독 목록 업데이트
+    function updateSubscriptionsList() {
+        if (activeSubscriptions.length === 0) {
+            subscriptionsList.innerHTML = '<div style="color: #999; font-style: italic;">구독이 없습니다.</div>';
+            return;
+        }
+
+        subscriptionsList.innerHTML = '';
+        activeSubscriptions.forEach((sub, index) => {
+            const subItem = document.createElement('div');
+            subItem.className = 'subscription-item';
+            subItem.innerHTML = `
+                    <span class="subscription-destination">${sub.destination}</span>
+                    <button class="unsubscribe-btn" onclick="unsubscribeDestination(${index})">구독취소</button>
+                `;
+            subscriptionsList.appendChild(subItem);
+        });
+    }
+
+    // 구독 취소
+    function unsubscribeDestination(index) {
+        const subscription = activeSubscriptions[index];
+        if (subscription && subscription.subscription) {
+            try {
+                subscription.subscription.unsubscribe();
+                info(`unsubscribe destination ${subscription.destination} success`);
+            } catch (e) {
+                error(`unsubscribe destination ${subscription.destination} fail, message = ${e.message}`);
+            }
+        }
+        activeSubscriptions.splice(index, 1);
+        updateSubscriptionsList();
+    }
+
+    // 전역으로 노출
+    window.unsubscribeDestination = unsubscribeDestination;
+
+    // 체크박스 이벤트
+    sockjsCheck.addEventListener('change', (e) => {
+        sockjsEnabled = e.target.checked;
+        updateUI();
+    });
+
+    stompCheck.addEventListener('change', (e) => {
+        stompEnabled = e.target.checked;
+        updateUI();
+    });
+
+    // UI 업데이트
+    function updateUI() {
+        const isStompAndNotConnected = stompEnabled && !connected;
+        const isStompAndConnected = stompEnabled && connected;
+
+        // STOMP connect header (연결 전에만 활성화)
+        stompConnectHeader.disabled = !isStompAndNotConnected;
+
+        // STOMP subscribe/send (연결 후에만 활성화)
+        stompSubscribeDestination.disabled = !isStompAndConnected;
+        subscribeBtn.disabled = !isStompAndConnected;
+        stompSendHeader.disabled = !isStompAndConnected;
+        stompSendDestination.disabled = !isStompAndConnected;
+
+        // 일반 메시지 (연결되면 활성화)
+        messageContent.disabled = !connected;
+        sendBtn.disabled = !connected;
+
+        // 연결 버튼
+        connectBtn.textContent = connected ? 'Disconnect' : 'Connect';
+        connectBtn.disabled = false;
+    }
+
+    // 연결/해제
+    connectBtn.addEventListener('click', () => {
+        if (connected) {
+            disconnect();
+        } else {
+            connect();
+        }
+    });
+
+    function connect() {
+        try {
+            if (stompEnabled) {
+                // STOMP 연결
+                let ws;
+                if (sockjsEnabled) {
+                    ws = new SockJS(urlInput.value);
+                } else {
+                    ws = new WebSocket(urlInput.value);
+                }
+
+                client = Stomp.over(ws);
+
+                // Connect header 파싱
+                let connectHeader = {};
+                if (stompConnectHeader.value.trim()) {
+                    try {
+                        connectHeader = JSON.parse(stompConnectHeader.value);
+                    } catch (e) {
+                        error(`STOMP connect header format error: ${stompConnectHeader.value}`);
+                        return;
+                    }
+                }
+
+                client.connect(connectHeader, () => {
+                    connected = true;
+                    updateUI();
+                    info(`Connect STOMP server success, url = ${urlInput.value}, connectHeader = ${stompConnectHeader.value}`);
+                }, (error) => {
+                    connected = false;
+                    updateUI();
+                    error(`STOMP connect error: ${error}`);
+                });
+
+            } else {
+                // 일반 WebSocket 또는 SockJS 연결
+                if (sockjsEnabled) {
+                    client = new SockJS(urlInput.value);
+                } else {
+                    client = new WebSocket(urlInput.value);
+                }
+
+                client.binaryType = 'arraybuffer';
+
+                client.onopen = (e) => {
+                    connected = true;
+                    updateUI();
+                    info(`Connect success, url = ${urlInput.value}`);
+                };
+
+                client.onmessage = (e) => {
+                    info(`Received message: ${e.data}`);
+                };
+
+                client.onerror = (e) => {
+                    connected = false;
+                    updateUI();
+                    error(`Connect error, message = ${e.data}, view chrome console for detail`);
+                };
+
+                client.onclose = (e) => {
+                    connected = false;
+                    updateUI();
+                    info('Connection closed');
+                };
+            }
+
+        } catch (e) {
+            error(`Connect error, message = ${e.message}, view chrome console for detail`);
+            connected = false;
+            updateUI();
+        }
+    }
+
+    function disconnect() {
+        if (!connected) {
+            error('Not Connected Yet');
+            return;
+        }
+
+        try {
+            if (stompEnabled) {
+                client.disconnect();
+            } else {
+                client.close();
+            }
+            connected = false;
+
+            // 구독 목록 초기화
+            activeSubscriptions = [];
+            updateSubscriptionsList();
+
+            updateUI();
+            info('Close Connection Success');
+        } catch (e) {
+            error(`disconnect fail, message = ${e.message}, view chrome console for detail`);
+        }
+    }
+
+    // 구독
+    subscribeBtn.addEventListener('click', () => {
+        if (!stompSubscribeDestination.value.trim()) {
+            error('STOMP subscribe destination can not be empty.');
+            return;
+        }
+
+        if (!stompEnabled) {
+            error('Not in STOMP mode');
+            return;
+        }
+
+        if (!connected) {
+            error('Not Connected yet');
+            return;
+        }
+
+        try {
+            const destination = stompSubscribeDestination.value;
+            const subscription = client.subscribe(destination, (message) => {
+                info(`Receive subscribed message from destination ${destination}, content = ${message.body}`);
+            });
+
+            // 구독 목록에 추가
+            activeSubscriptions.push({
+                destination: stompSubscribeDestination.value,
+                subscription: subscription
+            });
+            updateSubscriptionsList();
+
+            info(`subscribe destination ${stompSubscribeDestination.value} success`);
+
+            // 입력창 클리어
+            stompSubscribeDestination.value = '';
+
+        } catch (e) {
+            error(`subscribe destination ${stompSubscribeDestination.value} fail, message = ${e.message}`);
+        }
+    });
+
+    // 메시지 전송
+    sendBtn.addEventListener('click', () => {
+        try {
+            if (stompEnabled) {
+                // STOMP 메시지 전송
+                if (!stompSendDestination.value.trim()) {
+                    error('STOMP send destination can not be empty.');
+                    return;
+                }
+
+                let headerJSON = {};
+                if (stompSendHeader.value.trim()) {
+                    try {
+                        headerJSON = JSON.parse(stompSendHeader.value);
+                    } catch (e) {
+                        error(`STOMP send header format error: ${stompSendHeader.value}`);
+                        return;
+                    }
+                }
+
+                client.send(stompSendDestination.value, headerJSON, messageContent.value);
+                info(`send STOMP message, destination = ${stompSendDestination.value}, content = ${messageContent.value}, header = ${stompSendHeader.value}`);
+            } else {
+                // 일반 메시지 전송
+                client.send(messageContent.value);
+                info(`send message, content = ${messageContent.value}`);
+            }
+        } catch (e) {
+            error(`send message fail, message = ${e.message}, view chrome console for detail`);
+        }
+    });
+
+    // 콘솔 클리어
+    clearBtn.addEventListener('click', () => {
+        console.innerHTML = `
+                <div class="comment"># console output</div>
+                <div>$ <span class="pulse">_</span></div>
+            `;
+    });
+
+    // 초기 UI 업데이트
+    updateUI();
+    updateSubscriptionsList();
+
+    // 로비/대기방 테스트용 빠른 설정 버튼들 추가
+    const quickActionsDiv = document.createElement('div');
+    quickActionsDiv.innerHTML = `
+            <div style="background: #e6f7ff; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <h3 style="margin: 0 0 15px 0; color: #1890ff;">🎮 게임 테스트 빠른 설정</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+                    <button onclick="setLobbyConfig()" style="background: #52c41a;">연결 설정</button>
+                    <button onclick="sendRoomList()" style="background: #13c2c2;">방 목록 조회</button>
+                    <button onclick="sendRoomCreate()" style="background: #fa541c;">방 생성</button>
+                    <button onclick="sendRoomJoin()" style="background: #1890ff;">방 입장</button>
+                    <button onclick="sendRoomLeave()" style="background: #f5222d;">방 퇴장</button>
+                    <button onclick="sendTransferHost()" style="background: #eb2f96;">방장 권한 이양</button>
+                    <button onclick="sendHostResponse()" style="background: #ad4e00;">방장 권한 응답</button>
+                    <button onclick="sendRoomChangeResponse()" style="background: #ad4eee;">방 설정 변경</button>
+                    <button onclick="sendProblemChangeResponse()" style="background: #ad000e;">방 문제 변경</button>
+                    <button onclick="sendReadyChangeResponse()" style="background: #ee000e;">사용자 준비 상태 변경</button>
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                    빠른 테스트를 위한 설정 버튼들입니다. 방 입장/방장 권한 등은 실제 값을 수정해서 사용하세요.
+                </div>
+            </div>
+        `;
+
+    document.querySelector('.container').insertBefore(quickActionsDiv, document.querySelector('.form-section:last-child'));
+
+    // 빠른 설정 함수들
+    window.setLobbyConfig = () => {
+        sockjsCheck.checked = true;
+        stompCheck.checked = true;
+        sockjsEnabled = true;
+        stompEnabled = true;
+        urlInput.value = 'http://localhost:8080/ws';
+        stompConnectHeader.value = '{"Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJjYXRlZ29yeSI6ImFjY2VzcyIsInVzZXJJZCI6MSwibmlja25hbWUiOiJ0ZXN0MTExMSIsInJvbGUiOiJVU0VSIiwiaWF0IjoxNzU0Mjk1ODAyLCJleHAiOjE3NTY4ODc4MDJ9.qe5oXJuK9JRLs7DVe7QJ-NJwrvfHqjV85Eo6k-Vzp1E"}';
+        updateUI();
+        info('로비 설정 완료: SockJS + STOMP, 인증 토큰 설정됨');
+    };
+
+    window.sendRoomList = () => {
+        messageContent.value = '{}';
+        stompSendDestination.value = '/app/room/list';
+        info('방 목록 조회 메시지 준비됨');
+    };
+
+    window.sendRoomCreate = () => {
+        messageContent.value = '{     \n' +
+            '     "maxPlayers": 4,\n' +
+            '     "timeLimit": 12,\n' +
+            '     "problemInfo": {\n' +
+            '              "problemId": "8",         \n' +
+            '              "problemType": "ORIGINAL"     \n' +
+            '       }\n' +
+            '}';
+        stompSendDestination.value = '/app/room/create';
+        info('방 생성 메시지 준비됨 (문제ID: 8)');
+    };
+
+    window.sendRoomJoin = () => {
+        messageContent.value = '{"roomId": 0}';
+        stompSendDestination.value = '/app/room/join';
+        info('방 입장 메시지 준비됨 (방ID: 1) - 실제 방 ID로 수정하세요');
+    };
+
+    window.sendRoomLeave = () => {
+        messageContent.value = '{"roomId": 0}';
+        stompSendDestination.value = '/app/room/leave';
+        info('방 퇴장 메시지 준비됨');
+    };
+
+    window.sendTransferHost = () => {
+        messageContent.value = '{\n' +
+            '    "roomId": 0,\n' +
+            '    "targetUserId": 2\n' +
+            '}';
+        stompSendDestination.value = '/app/room/transfer-host';
+        info('방장 권한 이양 메시지 준비됨 (대상 유저ID: 2) - 실제 유저 ID로 수정하세요');
+    };
+
+    window.sendHostResponse = () => {
+        messageContent.value = '{\n' +
+            '    "roomId": 0,\n' +
+            '    "accept": true\n' +
+            '}';
+        stompSendDestination.value = '/app/room/respond-host-transfer';
+        info('방장 권한 응답 메시지 준비됨 (수락: true) - accept를 false로 변경하면 거절');
+    };
+
+    window.sendRoomChangeResponse = () => {
+        messageContent.value = '{\n' +
+            '    "roomId": 0,\n' +
+            '    "maxPlayers": 6,\n' +
+            '    "timeLimit": 12\n' +
+            '}';
+        stompSendDestination.value = '/app/room/settings';
+        info('방 변경 메시지 준비됨');
+    };
+
+    window.sendProblemChangeResponse = () => {
+        messageContent.value = '{\n' +
+            '    "problemId": "8",\n' +
+            '    "problemType": "ORIGINAL"\n' +
+            '}';
+        stompSendDestination.value = '/app/room/problem/update';
+        info('방 문제 변경 메시지 준비됨');
+    };
+
+    window.sendReadyChangeResponse = () => {
+        messageContent.value = '{\n' +
+            '    "roomId": 0,\n' +
+            '    "readyState": "READY"\n' +
+            '}\n';
+        stompSendDestination.value = '/app/room/ready';
+        info('사용자 상태 변경 메시지 준비됨');
+    };
+
+</script>
+</body>
+</html>

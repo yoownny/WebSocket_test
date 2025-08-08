@@ -16,5 +16,14 @@ public class RoomCreateRequest {
     public static class ProblemInfo {
         private String problemId;
         private String problemType; // "CUSTOM" 또는 "ORIGINAL"
+
+        // setter 메서드 추가
+        public void setProblemId(String problemId) {
+            this.problemId = problemId;
+        }
+
+        public void setProblemType(String problemType) {
+            this.problemType = problemType;
+        }
     }
 }

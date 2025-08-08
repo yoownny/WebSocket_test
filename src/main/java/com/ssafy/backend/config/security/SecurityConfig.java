@@ -4,19 +4,17 @@ import com.ssafy.backend.config.jwt.JWTFilter;
 import com.ssafy.backend.config.jwt.JWTUtil;
 import com.ssafy.backend.exception.ErrorCode;
 import com.ssafy.backend.repository.UserRepository;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -55,6 +53,7 @@ public class SecurityConfig {
     @Bean //  HTTP 요청이 들어올 때마다 필터부터 실행
     public SecurityFilterChain securityFilterChain(HttpSecurity http, UserRepository userRepository) throws Exception {
         http.csrf(csrf -> csrf.disable()) // csrf 공격 방지 비활성화
+                .cors(Customizer.withDefaults())
                 .formLogin(form -> form.disable())
                 .httpBasic(httpBasic -> httpBasic.disable()) // 아이디/비밀번호 팝업 창 비활성화
                 .authorizeHttpRequests(auth -> auth
@@ -65,15 +64,17 @@ public class SecurityConfig {
                                 "/api/auth/nickname",          // 닉네임 설정(회원가입)
                                 "/api/auth/check-nickname",      // 닉네임 중복 확인
                                 "/api/auth/logout",              // 로그아웃
+                                "/api/auth/nickname",        // 닉네임 설정(회원가입)
+                                "/api/users/check-nickname", // 닉네임 중복 확인
                                 "/api/users/{userId}",      // 사용자 정보 조회
+                                "/api/rankings/**",
                                 "/ws/**",                    // WebSocket 연결 엔드포인트
                                 "/app/**",                   // STOMP 클라이언트 → 서버 메시지
                                 "/topic/**",                 // STOMP 서버 → 클라이언트 브로드캐스트
-                                "/queue/**",                  // STOMP 서버 → 클라이언트 개인 메시지\
+                                "/queue/**",                  // STOMP 서버 → 클라이언트 개인 메시지
                                 "swagger-ui/**",
                                 "v3/api-docs/**"
-
-                        ).permitAll()
+                                ).permitAll()
                         // 나머지는 모두 인증 필요
                         .anyRequest().authenticated()
                 )
@@ -114,6 +115,4 @@ public class SecurityConfig {
 
         return http.build();
     }
-
-
 }

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 게임 테스트 클라이언트</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        h2 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+
+        .connection-status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+
+        input, select, textarea, button {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .action-button {
+            margin: 5px;
+            width: calc(50% - 10px);
+            display: inline-block;
+        }
+
+        .messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f8f9fa;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        .message {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background-color: white;
+        }
+
+        .message.error {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+
+        .message.success {
+            border-left-color: #28a745;
+            background-color: #d4edda;
+        }
+
+        .timestamp {
+            color: #666;
+            font-size: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+<h1>🎮 WebSocket 게임 테스트 클라이언트</h1>
+
+<div class="panel">
+    <h2>🔌 연결 설정</h2>
+    <div id="connectionStatus" class="connection-status disconnected">연결 안됨</div>
+
+    <div class="form-group">
+        <label>서버 URL:</label>
+        <input type="text" id="serverUrl" value="http://70.12.247.130:8080/ws" placeholder="WebSocket 서버 URL">
+    </div>
+
+    <div class="form-group">
+        <label>사용자 ID:</label>
+        <input type="number" id="userId" value="1" placeholder="사용자 ID">
+    </div>
+
+    <div class="form-group">
+        <label>방 ID:</label>
+        <input type="number" id="roomId" value="0" placeholder="방 ID">
+    </div>
+
+    <button onclick="connect()" id="connectBtn">연결</button>
+    <button onclick="disconnect()" id="disconnectBtn" disabled>연결 해제</button>
+</div>
+
+<div class="container">
+    <div class="panel">
+        <h2>🎯 게임 액션</h2>
+
+        <button class="action-button" onclick="startGame()" id="startGameBtn" disabled>게임 시작</button>
+        <button class="action-button" onclick="sendQuestion()" id="questionBtn" disabled>질문 제출</button>
+
+        <div class="form-group">
+            <label>질문 내용:</label>
+            <textarea id="questionText" placeholder="질문을 입력하세요..." rows="3"></textarea>
+        </div>
+
+        <button class="action-button" onclick="respondToQuestion()" id="answerBtn" disabled>답변 제출</button>
+        <button class="action-button" onclick="sendGuess()" id="guessBtn" disabled>정답 시도</button>
+
+        <div class="form-group">
+            <label>답변/추리 내용:</label>
+            <textarea id="answerText" placeholder="답변 또는 추리를 입력하세요..." rows="3"></textarea>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>⚖️ 판정 & 채팅</h2>
+
+        <div class="form-group">
+            <label>정답 판정:</label>
+            <textarea id="recSenderId" placeholder="정답 시도 senderId" rows="3"></textarea>
+            <textarea id="recGuess" placeholder="정답 시도 guess" rows="3"></textarea>
+            <select id="judgeResult">
+                <option value="true">정답</option>
+                <option value="false">오답</option>
+            </select>
+        </div>
+
+        <button class="action-button" onclick="respondToGuess()" id="judgeBtn" disabled>정답 판정</button>
+        <button class="action-button" onclick="sendChat()" id="chatBtn" disabled>채팅 전송</button>
+
+        <div class="form-group">
+            <label>채팅 메시지:</label>
+            <textarea id="chatText" placeholder="채팅 메시지를 입력하세요..." rows="3"></textarea>
+        </div>
+    </div>
+</div>
+
+<div class="panel full-width">
+    <h2>📨 메시지 로그</h2>
+    <button onclick="clearMessages()" style="width: 100px; float: right;">로그 지우기</button>
+    <div id="messages" class="messages"></div>
+</div>
+
+<script>
+    let stompClient = null;
+    let currentUserId = null;
+    let currentRoomId = null;
+    let recQuestionerId = null;
+    let recQuestion = null;
+    let recSenderId = null;
+    let recGuess = null;
+
+    function connect() {
+        const serverUrl = document.getElementById('serverUrl').value;
+        const userId = document.getElementById('userId').value;
+        const roomId = document.getElementById('roomId').value;
+
+        if (!serverUrl || !userId || !roomId) {
+            alert('서버 URL, 사용자 ID, 방 ID를 모두 입력해주세요.');
+            return;
+        }
+
+        currentUserId = parseInt(userId);
+        currentRoomId = parseInt(roomId);
+
+        const socket = new SockJS(serverUrl);
+        stompClient = Stomp.over(socket);
+
+        // 헤더에 사용자 ID 추가 (실제 구현에 맞게 조정 필요)
+        const headers = {
+            'userId': userId
+        };
+
+        stompClient.connect(headers, function(frame) {
+            addMessage('연결 성공: ' + frame, 'success');
+            updateConnectionStatus(true);
+            subscribeToTopics();
+        }, function(error) {
+            addMessage('연결 실패: ' + error, 'error');
+            updateConnectionStatus(false);
+        });
+    }
+
+    function disconnect() {
+        if (stompClient !== null) {
+            stompClient.disconnect();
+            updateConnectionStatus(false);
+            addMessage('연결 해제됨', 'success');
+        }
+    }
+
+    function updateConnectionStatus(connected) {
+        const status = document.getElementById('connectionStatus');
+        const buttons = ['startGameBtn', 'questionBtn', 'answerBtn', 'guessBtn', 'judgeBtn', 'chatBtn'];
+
+        if (connected) {
+            status.textContent = '연결됨';
+            status.className = 'connection-status connected';
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = false;
+            buttons.forEach(id => document.getElementById(id).disabled = false);
+        } else {
+            status.textContent = '연결 안됨';
+            status.className = 'connection-status disconnected';
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            buttons.forEach(id => document.getElementById(id).disabled = true);
+        }
+    }
+
+    function subscribeToTopics() {
+        // 개인 큐 구독
+        stompClient.subscribe('/user/queue/game', function(message) {
+            // message.body는 String이므로 JSON.parse 필요
+            const parsedBody = JSON.parse(message.body);
+
+            addMessage('개인 메시지: ' + message.body, 'success');
+            console.log("Parsed body:", parsedBody);
+            console.log("eventType:", parsedBody.eventType);
+            console.log("payload:", parsedBody.payload);
+            console.log("questionRequestDto:", parsedBody.payload?.questionRequestDto);
+            console.log("question:", parsedBody.payload?.questionRequestDto?.question);
+
+            if(parsedBody.eventType === "QUESTION_SEND") {
+                recQuestionerId = parsedBody.payload.questionRequestDto.senderId;
+                recQuestion = parsedBody.payload.questionRequestDto.question;
+            }else if(parsedBody.eventType === "RESPOND_QUESTION") {
+                recSenderId = parsedBody.payload.nextGuessDto.senderId;
+                recGuess = parsedBody.payload.nextGuessDto.guess;
+                console.log("다음 정답 시도: ", recSenderId, recGuess);
+                document.getElementById('recSenderId').value = recSenderId;
+                document.getElementById('recGuess').value = recGuess;
+            }else if(parsedBody.eventType === "GUESS_SEND") {
+                recSenderId = parsedBody.payload.senderId;
+                recGuess = parsedBody.payload.guess;
+                console.log("다음 정답 시도: ", recSenderId, recGuess);
+                document.getElementById('recSenderId').value = recSenderId;
+                document.getElementById('recGuess').value = recGuess;
+            }
+        });
+
+        // 게임 토픽 구독
+        stompClient.subscribe('/topic/games/' + currentRoomId + '/game-started', function(message) {
+            addMessage('게임 시작: ' + message.body, 'success');
+        });
+
+        stompClient.subscribe('/topic/games/' + currentRoomId + '/chat', function(message) {
+            addMessage('채팅: ' + message.body, 'success');
+        });
+
+        stompClient.subscribe('/topic/games/' + currentRoomId + '/history', function(message) {
+            addMessage('히스토리: ' + message.body, 'success');
+        });
+
+        stompClient.subscribe('/topic/games/' + currentRoomId, function(message) {
+            addMessage('게임 이벤트: ' + message.body, 'success');
+        });
+    }
+
+    function startGame() {
+        if (stompClient && stompClient.connected) {
+            stompClient.send('/app/games/' + currentRoomId + '/start', {}, '{}');
+            addMessage('게임 시작 요청 전송', 'success');
+        }
+    }
+
+    function sendQuestion() {
+        const questionText = document.getElementById('questionText').value;
+        if (!questionText.trim()) {
+            alert('질문을 입력해주세요.');
+            return;
+        }
+
+        const payload = {
+            question: questionText
+        };
+
+        if (stompClient && stompClient.connected) {
+            stompClient.send('/app/games/' + currentRoomId + '/question', {}, JSON.stringify(payload));
+            addMessage('질문 전송: ' + questionText, 'success');
+            document.getElementById('questionText').value = '';
+        }
+    }
+
+    function respondToQuestion() {
+        let answerText = document.getElementById('answerText').value;
+        if (!answerText.trim()) {
+            alert('답변을 입력해주세요.');
+            return;
+        }
+
+        if(answerText === "예") {
+            answerText = "CORRECT";
+        }else if(answerText === "아니오") {
+            answerText = "INCORRECT";
+        }else {
+            answerText = "IRRELEVANT"
+        }
+
+        const payload = {
+            questionerId: recQuestionerId,
+            question: recQuestion,
+            answerStatus: answerText
+        };
+
+        console.log(`답변!!! ${payload}`);
+
+        if (stompClient && stompClient.connected) {
+            stompClient.send('/app/games/' + currentRoomId + '/respond-question', {}, JSON.stringify(payload));
+            addMessage('답변 전송: ' + answerText, 'success');
+            document.getElementById('answerText').value = '';
+        }
+    }
+
+    function sendGuess() {
+        const guessText = document.getElementById('answerText').value;
+        if (!guessText.trim()) {
+            alert('추리를 입력해주세요.');
+            return;
+        }
+
+        const payload = {
+            question: guessText
+        };
+
+        if (stompClient && stompClient.connected) {
+            stompClient.send('/app/games/' + currentRoomId + '/guess', {}, JSON.stringify(payload));
+            addMessage('정답 시도 전송: ' + guessText, 'success');
+            document.getElementById('answerText').value = '';
+        }
+    }
+
+    function respondToGuess() {
+        const isCorrect = document.getElementById('judgeResult').value === 'true';
+
+        var answerText;
+        if(isCorrect === true) {
+            answerText = "CORRECT";
+        }else {
+            answerText = "INCORRECT";
+        }
+
+        const payload = {
+            senderId: recSenderId, //document.getElementById('recSenderId').value,
+            guess: recGuess, //document.getElementById('recGuess').value,
+            answerStatus: answerText
+        };
+
+        if (stompClient && stompClient.connected) {
+            document.getElementById('recSenderId').value = "";
+            document.getElementById('recGuess').value = "";
+            stompClient.send('/app/games/' + currentRoomId + '/respond-guess', {}, JSON.stringify(payload));
+            addMessage('정답 판정 전송: ' + (isCorrect ? '정답' : '오답'), 'success');
+        }
+    }
+
+    function sendChat() {
+        const chatText = document.getElementById('chatText').value;
+        if (!chatText.trim()) {
+            alert('채팅 메시지를 입력해주세요.');
+            return;
+        }
+
+        const payload = {
+            message: chatText
+        };
+
+        if (stompClient && stompClient.connected) {
+            stompClient.send('/app/games/' + currentRoomId + '/chat', {}, JSON.stringify(payload));
+            addMessage('채팅 전송: ' + chatText, 'success');
+            document.getElementById('chatText').value = '';
+        }
+    }
+
+    function addMessage(message, type = '') {
+        const messagesDiv = document.getElementById('messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ' + type;
+
+        const timestamp = new Date().toLocaleTimeString();
+        messageDiv.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function clearMessages() {
+        document.getElementById('messages').innerHTML = '';
+    }
+
+    // 엔터키로 메시지 전송
+    document.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && e.ctrlKey) {
+            const activeElement = document.activeElement;
+            if (activeElement.id === 'questionText') {
+                sendQuestion();
+            } else if (activeElement.id === 'answerText') {
+                respondToQuestion();
+            } else if (activeElement.id === 'chatText') {
+                sendChat();
+            }
+        }
+    });
+
+    // 페이지 로드 시 초기화
+    window.addEventListener('beforeunload', function() {
+        if (stompClient !== null) {
+            stompClient.disconnect();
+        }
+    });
+</script>
+</body>
+</html>

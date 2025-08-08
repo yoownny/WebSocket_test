@@ -32,7 +32,7 @@ public class ProblemSubmitRequestDto {
     private List<String> genres;
 
     @NotBlank(message = "난이도는 필수입니다")
-    private String difficulty; // EASY, MEDIUM, HARD
+    private String difficulty; // EASY, NORMAL, HARD
 
     @NotNull(message = "생성자 정보는 필수입니다")
     private CreatorDto creator;

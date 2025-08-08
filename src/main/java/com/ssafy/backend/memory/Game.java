@@ -1,6 +1,7 @@
 package com.ssafy.backend.memory;
 
 import com.ssafy.backend.memory.type.PlayerRole;
+import com.ssafy.backend.memory.type.PlayerState;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,8 +15,8 @@ import java.util.stream.Collectors;
 @Getter
 public class Game {
     // 게임 진행 정보
-    private Problem currentProblem; // todo; 없앨 수도 있음 -> 이번 게임 문제
     private int remainingQuestions; // 전체 남은 질문 수
+    private int remainingGuess; // 전체 남은 정답 시도 횟수
 
     // 플레이어 정보
     private List<Long> turnOrder; // 턴 순서 (랜덤)
@@ -25,43 +26,41 @@ public class Game {
     private int currentTurnIndex = 0; // 현재 턴 인덱스
     private ConcurrentHashMap<Long, Player> players = new ConcurrentHashMap<>(); // 플레이어 상세 정보
 
+
     // 게임 데이터 (한 판 끝나면 모두 삭제)
     private final Queue<AnswerAttempt> answerQueue = new ConcurrentLinkedQueue<>(); // 정답 시도 대기열
     private final List<QnA> gameHistory = Collections.synchronizedList(new ArrayList<>()); // 질문-답변 기록 (시간 순 저장)
 
-    // 타이머
-    @Setter
-    private long gameStartTime; // 게임 시작 시간
-//    private long turnStartTime; // 현재 턴 시작 시간
-
-    public Game(List<Long> playerIds, Map<Long, Player> roomPlayers) {
+    public Game(List<Long> playerIds, Map<Long, Player> roomPlayers, Long hostId) {
         // 턴 설정
-        initGameInitialInfo(playerIds);
+        initGameInitialInfo(playerIds, hostId);
 
         // 플레이어 상태 초기화
-        initializePlayersFrom(roomPlayers);
+        initializePlayersFrom(roomPlayers, hostId);
 
         // 첫 턴 설정
         setFirstTurn();
     }
 
-    private void initGameInitialInfo(List<Long> playerIds) {
+    private void initGameInitialInfo(List<Long> playerIds, Long hostId) {
         if (playerIds == null || playerIds.isEmpty()) {
             throw new IllegalArgumentException("플레이어 정보가 없습니다.");
         }
+        playerIds.remove(hostId);
         turnOrder = new ArrayList<>(playerIds);
         Collections.shuffle(turnOrder);
         remainingQuestions = 30;
-        gameStartTime = System.currentTimeMillis(); // todo; 이걸 여기서 검증하는게 맞나?
+        remainingGuess = playerIds.size() * 3;
     }
 
-    public void initializePlayersFrom(Map<Long, Player> roomPlayers) {
+    public void initializePlayersFrom(Map<Long, Player> roomPlayers, Long hostId) {
+        roomPlayers.remove(hostId);
         players = (ConcurrentHashMap<Long, Player>) roomPlayers.values().stream()
-                .map(gamePlayer -> {
+                .peek(gamePlayer -> {
                     // 복사 생성자로 게임용 Player 생성
                     // Player gamePlayer = Player.forGame(roomPlayer);
                     // todo; 얕은 복사 상태임
-                    // todo; 방장(출제자)는 제외
+                    gamePlayer.setState(PlayerState.PLAYING);
 
                     // 역할 설정
                     if (gamePlayer.getUserId().equals(currentQuestionerId)) {
@@ -70,7 +69,6 @@ public class Game {
                         gamePlayer.setRole(PlayerRole.PARTICIPANT);
                     }
 
-                    return gamePlayer;
                 })
                 .collect(Collectors.toConcurrentMap(
                         Player::getUserId,
@@ -105,14 +103,6 @@ public class Game {
         gameHistory.add(qna); // Collections.synchronizedList의 add()는 이미 동기화됨
     }
 
-    public int getGameHistorySize() {
-        return gameHistory.size(); // Collections.synchronizedList의 size()는 이미 동기화됨
-    }
-
-    public boolean hasGameHistory() {
-        return !gameHistory.isEmpty(); // isEmpty()도 이미 동기화됨
-    }
-
 
     // 턴 관리
     // 주어진 플레이어가 현재 질문자인지 확인
@@ -133,13 +123,17 @@ public class Game {
         return turnOrder.get(nextIndex);
     }
 
+    // 질문 횟수 차감
+    public void minusRemainingQuestions() {
+        remainingQuestions--;
+    }
+
     // 다음 턴으로 넘기기
     public void advanceTurn() {
         if (turnOrder.isEmpty()) return;
 
         currentTurnIndex = (currentTurnIndex + 1) % turnOrder.size();
         currentQuestionerId = turnOrder.get(currentTurnIndex);
-        remainingQuestions--;
     }
 
     // 특정 플레이어가 나갔을 때 턴 순서 조정
@@ -183,5 +177,12 @@ public class Game {
 
     public AnswerAttempt popAnswer() {
         return answerQueue.poll();
+    }
+
+    public synchronized void decrementRemainingGuess() {
+        if (remainingGuess <= 0) {
+            throw new IllegalStateException("정답 시도 횟수를 초과했습니다.");
+        }
+        remainingGuess--;
     }
 }

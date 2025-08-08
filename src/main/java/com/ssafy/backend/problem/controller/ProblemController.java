@@ -68,13 +68,32 @@ public class ProblemController {
         }
 
         try {
+            // 1. 이미 평가했는지 먼저 체크
+            if (problemEvaluateService.isAlreadyEvaluated(request, userId)) {
+                return ApiResponse.success(
+                        SuccessCode.ALREADY_EVALUATED.getStatus(),
+                        SuccessCode.ALREADY_EVALUATED.getMessage()
+                );
+            }
+
+            // 2. 평가 실행
             boolean saved = problemEvaluateService.evaluate(request, userId);
 
+            // 3. 결과 분기
             if (saved) {
-                return ApiResponse.success(SuccessCode.CREATE_SUCCESS.getStatus(), SuccessCode.CREATE_SUCCESS.getMessage());
+                // 과반수 좋아요 → DB 저장 완료
+                return ApiResponse.success(
+                        SuccessCode.PROBLEM_SAVE_COMPLETE.getStatus(),
+                        SuccessCode.PROBLEM_SAVE_COMPLETE.getMessage()
+                );
             } else {
-                return ApiResponse.success(SuccessCode.UPDATE_SUCCESS.getStatus(), SuccessCode.UPDATE_SUCCESS.getMessage());
+                // 첫 평가 완료
+                return ApiResponse.success(
+                        SuccessCode.EVALUATION_COMPLETE.getStatus(),
+                        SuccessCode.EVALUATION_COMPLETE.getMessage()
+                );
             }
+
         } catch (Exception e) {
             log.error("평가 처리 중 오류 발생", e);
             return ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR);

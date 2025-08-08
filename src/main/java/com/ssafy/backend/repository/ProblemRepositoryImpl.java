@@ -2,12 +2,15 @@ package com.ssafy.backend.repository;
 
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Projections;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.ssafy.backend.common.enums.Difficulty;
 import com.ssafy.backend.common.enums.Source;
 import com.ssafy.backend.entity.*;
 import com.ssafy.backend.problem.dto.Request.ProblemSearchRequestDto;
 import com.ssafy.backend.problem.dto.Response.ProblemSummaryDto;
+import com.ssafy.backend.ranking.dto.RankingItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
@@ -163,4 +166,27 @@ public class ProblemRepositoryImpl implements ProblemRepositoryCustom {
         return new SliceImpl<>(result, PageRequest.of(0, pageSize), hasNext);
     }
 
+    @Override
+    public List<RankingItem> findAllProblemsForRanking() {
+        QProblem problem = QProblem.problem;
+        QProblemInfo info = QProblemInfo.problemInfo;
+        QProblemLike likes = QProblemLike.problemLike;
+
+        return queryFactory
+                .select(Projections.constructor(RankingItem.class,
+                        problem.id,
+                        problem.title,
+                        // 좋아요 수 서브쿼리로 COUNT
+                        JPAExpressions.select(likes.count().intValue())
+                                .from(likes)
+                                .where(likes.problemId.eq(problem.id)),
+                        info.playCount
+                ))
+                .from(problem)
+                .join(info).on(problem.id.eq(info.id))
+                .where(
+                        info.playCount.goe(1) // 최소 1회 이상 플레이
+                )
+                .fetch();
+    }
 }
